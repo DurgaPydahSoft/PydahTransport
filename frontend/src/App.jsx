@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import BusManagement from './pages/BusManagement';
 import RouteManagement from './pages/RouteManagement';
+import TransportRequests from './pages/TransportRequests';
 import './App.css';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/buses" element={<BusManagement />} />
           <Route path="/routes" element={<RouteManagement />} />
+          <Route path="/transport-requests" element={<TransportRequests />} />
         </Routes>
       </div>
     </Router>

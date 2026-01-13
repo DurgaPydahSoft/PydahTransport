@@ -39,6 +39,13 @@ const Layout = ({ children }) => {
             )
         },
         { path: '/routes', label: 'Route Management', icon: Icons.Route },
+        {
+            path: '/transport-requests',
+            label: 'Requests',
+            icon: (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+            )
+        },
     ];
 
     const handleLogout = () => {
@@ -61,8 +68,8 @@ const Layout = ({ children }) => {
                             key={item.path}
                             to={item.path}
                             className={`flex items-center px-4 py-3 rounded-xl transition-all duration-200 group relative overflow-hidden ${location.pathname === item.path
-                                    ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100 font-semibold'
-                                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'
+                                ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100 font-semibold'
+                                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'
                                 }`}
                         >
                             <span className={`mr-3 transition-colors ${location.pathname === item.path ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
@@ -112,8 +119,8 @@ const Layout = ({ children }) => {
                             to={item.path}
                             onClick={() => setIsMobileMenuOpen(false)}
                             className={`flex items-center px-4 py-3 rounded-lg transition-colors ${location.pathname === item.path
-                                    ? 'bg-blue-50 text-blue-700 font-medium'
-                                    : 'text-gray-600 hover:bg-gray-50'
+                                ? 'bg-blue-50 text-blue-700 font-medium'
+                                : 'text-gray-600 hover:bg-gray-50'
                                 }`}
                         >
                             <span className="mr-3">{item.icon}</span>

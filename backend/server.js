@@ -1,9 +1,8 @@
 const express = require('express');
 const dotenv = require('dotenv');
+dotenv.config();
 const cors = require('cors');
 const { connectDB } = require('./config/db');
-
-dotenv.config();
 
 const app = express();
 
@@ -23,6 +22,7 @@ const authRoutes = require('./routes/authRoutes');
 app.use('/api/buses', busRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/transport-requests', require('./routes/transportRequestRoutes'));
 
 app.get('/', (req, res) => {
   res.json({ message: 'Pydah Transport API is running' });
