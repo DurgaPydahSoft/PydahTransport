@@ -223,3 +223,5 @@ CREATE TABLE IF NOT EXISTS transport_requests (
   request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- Add semester/expiry columns: run alter-transport-requests-semester.sql when semesters table exists.

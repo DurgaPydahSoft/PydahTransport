@@ -151,3 +151,11 @@ Pydah Transport is a web-based transport management system for **Pydah Education
 ## **8. Hybrid Database Strategy**
 - **MySQL**: Used to fetch and manage Student/Staff data (existing institute records).
 - **MongoDB**: Used for Transport-specific data (Buses, Routes, Stages, Fares, Logs) and linking them to MySQL user records.
+- **Fee Management MongoDB**: Optional second MongoDB connection for Fee Portal. When a transport request is **approved**, a Transport Fee (Fee Head code `TRN01`) is created for the student in the Fee Management system for the given academic year.
+
+### **8.1 Environment variables (Fee Integration)**
+Configure in backend `.env` as needed:
+
+- **`FEE_MONGO_URI`** – MongoDB connection string for the Fee Management database. If not set, approve/reject still works but fee creation is disabled (API returns 503 when approving).
+- **`CURRENT_ACADEMIC_YEAR`** – Optional. Academic year for new transport fees (e.g. `2024-2025`). If omitted, the server derives it from the current date (e.g. July 2024 → `2024-2025`).
+- **`FEE_DEFAULT_COLLEGE`** – Optional. Default `college` value for `StudentFee` when the student is not found in the MySQL `students` table. Defaults to `"Default"`.

@@ -28,6 +28,10 @@ const busSchema = new mongoose.Schema({
         type: String,
         enum: ['Active', 'In Maintenance', 'Retired'],
         default: 'Active'
+    },
+    assignedRouteId: {
+        type: String,
+        default: null
     }
 }, {
     timestamps: true

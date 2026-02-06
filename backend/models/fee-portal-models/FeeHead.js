@@ -1,0 +1,25 @@
+const mongoose = require('mongoose');
+
+const feeHeadSchema = mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+  },
+  code: {
+    type: String,
+    unique: true,
+    trim: true,
+    sparse: true, // Allows null/undefined to not conflict (useful for existing data migration)
+  },
+  description: {
+    type: String,
+  },
+}, {
+  timestamps: true,
+});
+
+const FeeHead = mongoose.model('FeeHead', feeHeadSchema);
+FeeHead.schema = feeHeadSchema;
+module.exports = FeeHead;

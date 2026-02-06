@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 
+const API = import.meta.env.VITE_API_URL || '';
+
+const TABS = { buses: 'buses', mapping: 'mapping' };
+
 const BusManagement = () => {
+    const [activeTab, setActiveTab] = useState(TABS.buses);
     const [buses, setBuses] = useState([]);
+    const [routes, setRoutes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
+    const [assigningBusId, setAssigningBusId] = useState(null);
     const [formData, setFormData] = useState({
         busNumber: '',
         capacity: '',
@@ -18,7 +26,7 @@ const BusManagement = () => {
 
     const fetchBuses = async () => {
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/buses`);
+            const response = await fetch(`${API}/buses`);
             const data = await response.json();
             setBuses(data);
         } catch (error) {
@@ -28,9 +36,36 @@ const BusManagement = () => {
         }
     };
 
+    const fetchRoutes = async () => {
+        try {
+            const response = await fetch(`${API}/routes`);
+            const data = await response.json();
+            setRoutes(data);
+        } catch (error) {
+            console.error('Error fetching routes:', error);
+        }
+    };
+
     useEffect(() => {
         fetchBuses();
+        fetchRoutes();
     }, []);
+
+    const handleAssignRoute = async (busId, routeId) => {
+        setAssigningBusId(busId);
+        try {
+            const response = await fetch(`${API}/buses/${busId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assignedRouteId: routeId || null }),
+            });
+            if (response.ok) fetchBuses();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setAssigningBusId(null);
+        }
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -57,7 +92,7 @@ const BusManagement = () => {
         if (!window.confirm('Are you sure you want to delete this bus?')) return;
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/buses/${id}`, {
+            const response = await fetch(`${API}/buses/${id}`, {
                 method: 'DELETE'
             });
 
@@ -89,8 +124,8 @@ const BusManagement = () => {
         e.preventDefault();
         try {
             const url = editingId
-                ? `${import.meta.env.VITE_API_URL}/buses/${editingId}`
-                : `${import.meta.env.VITE_API_URL}/buses`;
+                ? `${API}/buses/${editingId}`
+                : `${API}/buses`;
 
             const method = editingId ? 'PUT' : 'POST';
 
@@ -116,19 +151,89 @@ const BusManagement = () => {
 
     return (
         <Layout>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <div>
-                    <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Bus Fleet</h2>
-                    <p className="text-gray-500 mt-1">Manage institute buses, drivers, and attendants.</p>
+                    <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Bus Management</h2>
+                    <p className="text-gray-500 mt-1">Manage buses and assign them to routes.</p>
                 </div>
+                {activeTab === TABS.buses && (
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-blue-200 transition-all hover:shadow-blue-300 active:scale-95 flex items-center"
+                    >
+                        <span className="mr-2 text-xl">+</span> Add New Bus
+                    </button>
+                )}
+            </div>
+
+            <div className="flex gap-2 mb-6 border-b border-gray-200">
                 <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-blue-200 transition-all hover:shadow-blue-300 active:scale-95 flex items-center"
+                    type="button"
+                    onClick={() => setActiveTab(TABS.buses)}
+                    className={`px-4 py-2.5 rounded-t-xl text-sm font-medium transition-colors ${activeTab === TABS.buses ? 'bg-white border border-b-0 border-gray-200 text-blue-700 shadow-sm -mb-px' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                 >
-                    <span className="mr-2 text-xl">+</span> Add New Bus
+                    Buses 
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab(TABS.mapping)}
+                    className={`px-4 py-2.5 rounded-t-xl text-sm font-medium transition-colors ${activeTab === TABS.mapping ? 'bg-white border border-b-0 border-gray-200 text-blue-700 shadow-sm -mb-px' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                >
+                    Bus–Route mapping
                 </button>
             </div>
 
+            {activeTab === TABS.mapping && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-8">
+                    <div className="p-4 border-b border-gray-100">
+                        <h3 className="font-semibold text-gray-800">Assign each bus to a route</h3>
+                        <p className="text-sm text-gray-500 mt-0.5">Changes apply immediately. Use Fleet & Passengers to auto-fill capacity.</p>
+                    </div>
+                    {loading ? (
+                        <div className="p-8 text-center text-gray-500">Loading…</div>
+                    ) : buses.length === 0 ? (
+                        <div className="p-8 text-center text-gray-500">No buses. Add buses in the Buses tab first.</div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+                                        <th className="p-4">Bus number</th>
+                                        <th className="p-4">Type</th>
+                                        <th className="p-4">Capacity</th>
+                                        <th className="p-4">Assigned route</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {buses.map((bus) => (
+                                        <tr key={bus._id} className="hover:bg-gray-50">
+                                            <td className="p-4 font-medium text-gray-800">{bus.busNumber}</td>
+                                            <td className="p-4 text-gray-600">{bus.type}</td>
+                                            <td className="p-4 text-gray-600">{bus.capacity} seats</td>
+                                            <td className="p-4">
+                                                <select
+                                                    value={bus.assignedRouteId || ''}
+                                                    onChange={(e) => handleAssignRoute(bus._id, e.target.value || null)}
+                                                    disabled={assigningBusId === bus._id}
+                                                    className="w-full max-w-xs text-sm rounded-lg border border-gray-300 py-2 px-3"
+                                                >
+                                                    <option value="">— None —</option>
+                                                    {routes.map((r) => (
+                                                        <option key={r._id} value={r.routeId}>{r.routeName} ({r.routeId})</option>
+                                                    ))}
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === TABS.buses && (
+            <>
             {loading ? (
                 <div className="text-center py-20 text-gray-500">Loading fleet data...</div>
             ) : buses.length === 0 ? (
@@ -182,16 +287,27 @@ const BusManagement = () => {
                                 </div>
                                 <div className="flex items-center">
                                     <span className="w-5 mr-2">👨‍✈️</span>
-                                    <span>{bus.driverName}</span>
+                                    <span>{bus.driverName || '—'}</span>
                                 </div>
                                 <div className="flex items-center">
                                     <span className="w-5 mr-2">🎫</span>
-                                    <span>{bus.attendantName}</span>
+                                    <span>{bus.attendantName || '—'}</span>
                                 </div>
+                                {bus.assignedRouteId && (
+                                    <p className="text-xs text-gray-500 pt-1">Route: {routes.find(r => r.routeId === bus.assignedRouteId)?.routeName || bus.assignedRouteId}</p>
+                                )}
                             </div>
+                            <Link
+                                to={`/buses/${bus._id}`}
+                                className="mt-4 block w-full text-center py-2 rounded-xl bg-gray-100 hover:bg-blue-50 text-blue-700 font-medium text-sm transition-colors"
+                            >
+                                View details & passengers →
+                            </Link>
                         </div>
                     ))}
                 </div>
+            )}
+            </>
             )}
 
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingId ? "Edit Bus" : "Add New Bus"}>

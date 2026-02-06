@@ -3,8 +3,11 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import BusManagement from './pages/BusManagement';
+import BusDetails from './pages/BusDetails';
+import Fleet from './pages/Fleet';
 import RouteManagement from './pages/RouteManagement';
 import TransportRequests from './pages/TransportRequests';
+import TransportDues from './pages/TransportDues';
 import './App.css';
 
 function App() {
@@ -16,8 +19,11 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/buses" element={<BusManagement />} />
+          <Route path="/buses/:id" element={<BusDetails />} />
+          <Route path="/fleet" element={<Fleet />} />
           <Route path="/routes" element={<RouteManagement />} />
           <Route path="/transport-requests" element={<TransportRequests />} />
+          <Route path="/transport-dues" element={<TransportDues />} />
         </Routes>
       </div>
     </Router>

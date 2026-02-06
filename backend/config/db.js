@@ -1,19 +1,39 @@
 const mongoose = require('mongoose');
 const mysql = require('mysql2/promise');
 
+// Default MongoDB (Transport app: buses, routes, admin)
 const connectDB = async () => {
     try {
         await mongoose.connect(process.env.MONGO_URI);
-        console.log('MongoDB Connected');
+        console.log('MongoDB Connected (Transport)');
     } catch (error) {
         console.error('MongoDB Connection Error:', error.message);
         process.exit(1);
     }
 };
 
+// Fee Management MongoDB (separate database for fee portal)
+let feeConnection = null;
+const connectFeeDB = async () => {
+    if (!process.env.FEE_MONGO_URI) {
+        console.warn('FEE_MONGO_URI not set – Fee Management features disabled');
+        return;
+    }
+    try {
+        feeConnection = mongoose.createConnection(process.env.FEE_MONGO_URI);
+        await feeConnection.asPromise();
+        console.log('MongoDB Connected (Fee Management)');
+    } catch (error) {
+        console.error('Fee MongoDB Connection Error:', error.message);
+        feeConnection = null;
+    }
+};
+
 const output = {
     connectDB,
-    mysqlPool: null 
+    connectFeeDB,
+    getFeeConnection: () => feeConnection,
+    mysqlPool: null
 };
 
 // Initialize MySQL Pool
