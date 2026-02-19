@@ -1,0 +1,67 @@
+const jwt = require('jsonwebtoken');
+const UserRole = require('../models/UserRole');
+const { getEmployeeModel } = require('../models/Employee');
+
+const protect = async (req, res, next) => {
+    let token;
+
+    if (
+        req.headers.authorization &&
+        req.headers.authorization.startsWith('Bearer')
+    ) {
+        try {
+            token = req.headers.authorization.split(' ')[1];
+
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+            const Employee = getEmployeeModel();
+            if (Employee) {
+                req.user = await Employee.findById(decoded.id).select('-password').lean();
+            }
+
+            // If not found in Employee DB, check Legacy Admin DB
+            if (!req.user) {
+                const Admin = require('../models/Admin');
+                const adminUser = await Admin.findById(decoded.id).select('-password').lean();
+
+                if (adminUser) {
+                    req.user = {
+                        ...adminUser,
+                        roles: ['admin'], // Legacy admins are always admins
+                        permissions: [] // or default permissions
+                    };
+                }
+            }
+
+            if (!req.user) {
+                return res.status(401).json({ message: 'Not authorized, user not found' });
+            }
+
+            // If it was an employee, attach roles from local DB
+            if (!req.user.roles) {
+                const userRole = await UserRole.findOne({ employeeId: req.user._id }).lean();
+                req.user.roles = userRole ? userRole.roles : ['user'];
+                req.user.permissions = userRole ? userRole.permissions : [];
+            }
+
+            next();
+        } catch (error) {
+            console.error(error);
+            res.status(401).json({ message: 'Not authorized, token failed' });
+        }
+    }
+
+    if (!token) {
+        res.status(401).json({ message: 'Not authorized, no token' });
+    }
+};
+
+const admin = (req, res, next) => {
+    if (req.user && req.user.roles && req.user.roles.includes('admin')) {
+        next();
+    } else {
+        res.status(401).json({ message: 'Not authorized as an admin' });
+    }
+};
+
+module.exports = { protect, admin };

@@ -8,6 +8,7 @@ import Fleet from './pages/Fleet';
 import RouteManagement from './pages/RouteManagement';
 import TransportRequests from './pages/TransportRequests';
 import TransportDues from './pages/TransportDues';
+import UserManagement from './pages/UserManagement';
 import './App.css';
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
           <Route path="/routes" element={<RouteManagement />} />
           <Route path="/transport-requests" element={<TransportRequests />} />
           <Route path="/transport-dues" element={<TransportDues />} />
+          <Route path="/users" element={<UserManagement />} />
         </Routes>
       </div>
     </Router>

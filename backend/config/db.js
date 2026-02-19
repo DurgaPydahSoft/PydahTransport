@@ -29,10 +29,29 @@ const connectFeeDB = async () => {
     }
 };
 
+// Employee Management MongoDB (HRMS)
+let employeeConnection = null;
+const connectEmployeeDB = async () => {
+    if (!process.env.MONGO_EMPLOYEE_URI) {
+        console.warn('MONGO_EMPLOYEE_URI not set – User Management features disabled');
+        return;
+    }
+    try {
+        employeeConnection = mongoose.createConnection(process.env.MONGO_EMPLOYEE_URI);
+        await employeeConnection.asPromise();
+        console.log('MongoDB Connected (HRMS Employee DB)');
+    } catch (error) {
+        console.error('Employee MongoDB Connection Error:', error.message);
+        employeeConnection = null;
+    }
+};
+
 const output = {
     connectDB,
     connectFeeDB,
+    connectEmployeeDB,
     getFeeConnection: () => feeConnection,
+    getEmployeeConnection: () => employeeConnection,
     mysqlPool: null
 };
 
