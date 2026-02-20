@@ -2,7 +2,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 dotenv.config();
 const cors = require('cors');
-const { connectDB, connectFeeDB } = require('./config/db');
+const { connectDB, connectFeeDB, connectEmployeeDB } = require('./config/db');
 
 const app = express();
 
@@ -21,15 +21,17 @@ app.use('/api/routes', routeRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/transport-requests', require('./routes/transportRequestRoutes'));
 app.use('/api/transport-dues', require('./routes/transportDuesRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 
 app.get('/', (req, res) => {
-  res.json({ message: 'Pydah Transport API is running' });
+    res.json({ message: 'Pydah Transport API is running' });
 });
 
 const PORT = process.env.PORT || 5000;
 
 const startDbs = async () => {
     await connectDB();
+    await connectEmployeeDB();
     await connectFeeDB();
 };
 
