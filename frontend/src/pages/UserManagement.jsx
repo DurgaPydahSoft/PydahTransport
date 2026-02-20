@@ -100,6 +100,11 @@ const UserManagement = () => {
     };
 
     const handleManageRole = (user) => {
+        if (user.is_superadmin || (user.roles && user.roles.includes('superadmin'))) {
+            alert("Super Admin roles cannot be modified.");
+            return;
+        }
+
         setSelectedUser(user);
         setSelectedEmployee(null); // Clear add mode selection
         // Take the first role if exists, or default to user
@@ -110,6 +115,11 @@ const UserManagement = () => {
     };
 
     const handleDeleteUser = async (user) => {
+        if (user.is_superadmin || (user.roles && user.roles.includes('superadmin'))) {
+            alert("Super Admin cannot be deleted.");
+            return;
+        }
+
         if (!window.confirm(`Are you sure you want to remove ${user.employee_name} from admins? This will revoke their access.`)) {
             return;
         }
@@ -205,7 +215,7 @@ const UserManagement = () => {
                     </div>
                     <button
                         onClick={openAddAdminModal}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center"
+                        className="bg-blue-900 hover:bg-blue-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center"
                     >
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                         Add Admin
@@ -238,8 +248,11 @@ const UserManagement = () => {
                                         <td className="p-4 text-sm">
                                             <div className="flex flex-wrap gap-1">
                                                 {user.roles && user.roles.map(role => (
-                                                    <span key={role} className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 capitalize">
-                                                        {role}
+                                                    <span key={role} className={`px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${role === 'superadmin'
+                                                            ? 'bg-purple-100 text-purple-800 border-purple-200'
+                                                            : 'bg-blue-100 text-blue-800 border-blue-200'
+                                                        }`}>
+                                                        {role === 'superadmin' ? 'Super Admin' : role}
                                                     </span>
                                                 ))}
                                             </div>
@@ -250,18 +263,22 @@ const UserManagement = () => {
                                             </span>
                                         </td>
                                         <td className="p-4 text-right">
-                                            <button
-                                                onClick={() => handleManageRole(user)}
-                                                className="text-sm text-indigo-600 hover:text-indigo-900 font-medium px-2 py-1 rounded hover:bg-indigo-50 transition-colors mr-2"
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteUser(user)}
-                                                className="text-sm text-red-600 hover:text-red-900 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                                            >
-                                                Delete
-                                            </button>
+                                            {!(user.is_superadmin || (user.roles && user.roles.includes('superadmin'))) && (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleManageRole(user)}
+                                                        className="text-sm text-indigo-600 hover:text-indigo-900 font-medium px-2 py-1 rounded hover:bg-indigo-50 transition-colors mr-2"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteUser(user)}
+                                                        className="text-sm text-red-600 hover:text-red-900 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            )}
                                         </td>
                                     </tr>
                                 ))
@@ -451,7 +468,7 @@ const UserManagement = () => {
                             <button
                                 onClick={saveRole}
                                 disabled={!selectedEmployee}
-                                className={`px-4 py-2 text-white rounded-lg font-medium shadow-sm transition-all ${!selectedEmployee ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                                className={`px-4 py-2 text-white rounded-lg font-medium shadow-sm transition-all ${!selectedEmployee ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-900 hover:bg-blue-800'}`}
                             >
                                 Add Admin
                             </button>

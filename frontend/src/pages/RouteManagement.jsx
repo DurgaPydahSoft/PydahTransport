@@ -1,12 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
+import Loader from '../components/Loader';
+import {
+    Map,
+    Edit,
+    Trash2,
+    Clock,
+    Navigation,
+    MapPin,
+    Plus,
+    ArrowRight,
+    Milestone,
+    IndianRupee,
+    ChevronDown,
+    ChevronUp
+} from 'lucide-react';
+
+const API = import.meta.env.VITE_API_URL || '';
 
 const RouteManagement = () => {
     const [routes, setRoutes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
+    const [expandedRouteId, setExpandedRouteId] = useState(null);
     const [formData, setFormData] = useState({
         routeId: '',
         routeName: '',
@@ -18,8 +36,9 @@ const RouteManagement = () => {
     });
 
     const fetchRoutes = async () => {
+        setLoading(true);
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/routes`);
+            const response = await fetch(`${API}/routes`);
             const data = await response.json();
             setRoutes(data);
         } catch (error) {
@@ -32,6 +51,10 @@ const RouteManagement = () => {
     useEffect(() => {
         fetchRoutes();
     }, []);
+
+    const toggleRoute = (id) => {
+        setExpandedRouteId(expandedRouteId === id ? null : id);
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -60,7 +83,8 @@ const RouteManagement = () => {
         setFormData(prev => ({ ...prev, stages: newStages }));
     };
 
-    const handleEdit = (route) => {
+    const handleEdit = (route, e) => {
+        e.stopPropagation();
         setFormData({
             routeId: route.routeId,
             routeName: route.routeName,
@@ -74,11 +98,12 @@ const RouteManagement = () => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = async (id) => {
+    const handleDelete = async (id, e) => {
+        e.stopPropagation();
         if (!window.confirm('Are you sure you want to delete this route?')) return;
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/routes/${id}`, {
+            const response = await fetch(`${API}/routes/${id}`, {
                 method: 'DELETE'
             });
 
@@ -106,8 +131,8 @@ const RouteManagement = () => {
         e.preventDefault();
         try {
             const url = editingId
-                ? `${import.meta.env.VITE_API_URL}/routes/${editingId}`
-                : `${import.meta.env.VITE_API_URL}/routes`;
+                ? `${API}/routes/${editingId}`
+                : `${API}/routes`;
 
             const method = editingId ? 'PUT' : 'POST';
 
@@ -133,145 +158,223 @@ const RouteManagement = () => {
         <Layout>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <div>
-                    <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Route Network</h2>
-                    <p className="text-gray-500 mt-1">Design routes, manage stages, and set fares.</p>
+                    <h2 className="text-3xl font-extrabold text-blue-900 tracking-tight">Route Network</h2>
+                    <p className="text-slate-600 mt-1">Design routes, manage stages, and set fares.</p>
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-indigo-200 transition-all hover:shadow-indigo-300 active:scale-95 flex items-center"
+                    className="bg-blue-900 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md transition-all hover:shadow-lg active:scale-95 flex items-center group"
                 >
-                    <span className="mr-2 text-xl">+</span> Create Route
+                    <Plus className="mr-2 group-hover:rotate-90 transition-transform" size={20} />
+                    Create Route
                 </button>
             </div>
 
             {loading ? (
-                <div className="text-center py-20 text-gray-500">Loading route data...</div>
+                <div className="flex items-center justify-center py-20">
+                    <Loader size={40} text="Loading route data..." />
+                </div>
             ) : routes.length === 0 ? (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[400px] flex flex-col items-center justify-center p-8">
-                    <div className="bg-indigo-50 p-6 rounded-full mb-4 animate-pulse">
-                        <span className="text-4xl">🗺️</span>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[400px] flex flex-col items-center justify-center p-8">
+                    <div className="bg-slate-50 p-6 rounded-full mb-4">
+                        <Map size={48} className="text-slate-400" />
                     </div>
-                    <h3 className="text-xl font-bold text-gray-800 mb-2 text-center">Route Map Empty</h3>
-                    <p className="text-gray-500 text-center max-w-sm mx-auto">
+                    <h3 className="text-xl font-bold text-slate-800 mb-2 text-center">Route Map Empty</h3>
+                    <p className="text-slate-500 text-center max-w-md mx-auto">
                         Define the pickup and drop points for your students. Create your first route to get started.
                     </p>
-                    <button onClick={() => setIsModalOpen(true)} className="text-indigo-600 font-semibold hover:text-indigo-800 hover:underline mt-4">
+                    <button onClick={() => setIsModalOpen(true)} className="mt-6 flex items-center text-blue-600 font-semibold hover:text-blue-800 hover:bg-blue-50 px-4 py-2 rounded-lg transition-all">
+                        <Plus size={20} className="mr-2" />
                         Create first route
                     </button>
                 </div>
             ) : (
-                <div className="space-y-6">
-                    {routes.map((route) => (
-                        <div key={route._id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden transform transition-all hover:shadow-md group relative">
-                            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 p-1 rounded-lg backdrop-blur-sm">
-                                <button
-                                    onClick={() => handleEdit(route)}
-                                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                    title="Edit Route"
+                <div className="flex flex-col space-y-3">
+                    {routes.map((route) => {
+                        const isExpanded = expandedRouteId === route._id;
+                        return (
+                            <div
+                                key={route._id}
+                                className={`bg-white rounded-xl shadow-sm border transition-all duration-300 overflow-hidden ${isExpanded ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200 hover:border-blue-200 hover:shadow-md'}`}
+                            >
+                                {/* Header / Summary Row */}
+                                <div
+                                    onClick={() => toggleRoute(route._id)}
+                                    className="p-3 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer group"
                                 >
-                                    ✏️
-                                </button>
-                                <button
-                                    onClick={() => handleDelete(route._id)}
-                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                    title="Delete Route"
-                                >
-                                    🗑️
-                                </button>
-                            </div>
-                            <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
-                                <div>
-                                    <div className="flex items-center gap-3">
-                                        <h3 className="text-lg font-bold text-gray-900">{route.routeName}</h3>
-                                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-md">{route.routeId}</span>
-                                    </div>
-                                    <p className="text-sm text-gray-500 mt-1">{route.startPoint} ➝ {route.endPoint} • {route.estimatedTime}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-2xl font-bold text-indigo-600">{route.totalDistance} km</p>
-                                    <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Total Distance</p>
-                                </div>
-                            </div>
-                            <div className="p-6">
-                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Route Stages & Fares</h4>
-                                <div className="flex overflow-x-auto pb-4 gap-4 custom-scrollbar">
-                                    {route.stages.map((stage, index) => (
-                                        <div key={index} className="flex-shrink-0 min-w-[140px] p-4 bg-gray-50 rounded-xl border border-gray-100 relative">
-                                            <div className="absolute top-0 right-0 -mt-2 -mr-2 w-6 h-6 bg-indigo-500 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-sm">
-                                                {index + 1}
+                                    {/* Left: Identity */}
+                                    <div className="flex items-center gap-3 w-full md:w-1/4">
+                                        <div className={`p-1.5 rounded-lg transition-colors ${isExpanded ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'}`}>
+                                            <Navigation size={16} />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{route.routeName}</h3>
+                                                <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded border border-slate-200 font-mono">
+                                                    {route.routeId}
+                                                </span>
                                             </div>
-                                            <h5 className="font-bold text-gray-800 truncate mb-1" title={stage.stageName}>{stage.stageName}</h5>
-                                            <p className="text-xs text-gray-500 mb-3">{stage.distanceFromStart} km from start</p>
-                                            <div className="space-y-1">
-                                                <div className="flex justify-between text-xs">
-                                                    <span className="text-gray-400">Fare:</span>
-                                                    <span className="font-medium text-gray-700">₹{stage.fare}</span>
-                                                </div>
+                                            <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-0.5">
+                                                <Clock size={10} className="text-slate-400" />
+                                                {route.estimatedTime}
                                             </div>
                                         </div>
-                                    ))}
+                                    </div>
+
+                                    {/* Middle: Route Path */}
+                                    <div className="flex items-center justify-center gap-3 w-full md:w-1/3 px-2">
+                                        <span className="text-[10px] font-semibold text-slate-700 truncate max-w-[100px] text-right" title={route.startPoint}>{route.startPoint}</span>
+                                        <div className="flex-1 flex flex-col items-center">
+                                            <div className="w-full h-px bg-slate-200 relative">
+                                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-1">
+                                                    <ArrowRight size={12} className="text-slate-300" />
+                                                </div>
+                                            </div>
+                                            <span className="text-[9px] text-slate-400 font-medium mt-1">{route.totalDistance} km</span>
+                                        </div>
+                                        <span className="text-[10px] font-semibold text-slate-700 truncate max-w-[100px]" title={route.endPoint}>{route.endPoint}</span>
+                                    </div>
+
+                                    {/* Right: Stats & Actions */}
+                                    <div className="flex items-center justify-end gap-3 w-full md:w-1/3">
+                                        <div className="hidden sm:flex items-center gap-3 mr-2">
+                                            <div className="text-right">
+                                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stages</span>
+                                                <span className="block text-xs font-semibold text-slate-700">{route.stages.length}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 pl-3 border-l border-slate-100">
+                                            <button
+                                                onClick={(e) => handleEdit(route, e)}
+                                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                title="Edit Route"
+                                            >
+                                                <Edit size={14} />
+                                            </button>
+                                            <button
+                                                onClick={(e) => handleDelete(route._id, e)}
+                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                title="Delete Route"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                            <div className={`p-1 ml-1 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`}>
+                                                <ChevronDown size={16} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Expanded Content: Stages */}
+                                <div
+                                    className={`bg-slate-50 border-t border-slate-100 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
+                                >
+                                    <div className="p-4">
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center">
+                                            <Milestone size={12} className="mr-1.5 text-blue-500" />
+                                            Route Stages & Fares
+                                        </h4>
+
+                                        {route.stages.length === 0 ? (
+                                            <p className="text-xs text-slate-400 italic">No stages defined for this route.</p>
+                                        ) : (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                {route.stages.map((stage, index) => (
+                                                    <div key={index} className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-sm flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-[10px] ring-2 ring-white">
+                                                                {index + 1}
+                                                            </span>
+                                                            <div>
+                                                                <p className="font-semibold text-slate-700 text-xs">{stage.stageName}</p>
+                                                                <p className="text-[10px] text-slate-400">{stage.distanceFromStart} km from start</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="font-mono font-medium text-slate-700 text-xs bg-green-50 px-1.5 py-0.5 rounded text-green-700 border border-green-100">
+                                                            ₹{stage.fare}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingId ? "Edit Route" : "Create New Route"}>
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-5">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Route ID</label>
-                            <input type="text" name="routeId" required value={formData.routeId} onChange={handleChange} className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. R01" />
+                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Route ID</label>
+                            <input type="text" name="routeId" required value={formData.routeId} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="e.g. R01" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Route Name</label>
-                            <input type="text" name="routeName" required value={formData.routeName} onChange={handleChange} className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Campus Express" />
+                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Route Name</label>
+                            <input type="text" name="routeName" required value={formData.routeName} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="e.g. Campus Express" />
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Start Point</label>
-                            <input type="text" name="startPoint" required value={formData.startPoint} onChange={handleChange} className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Start Point</label>
+                            <input type="text" name="startPoint" required value={formData.startPoint} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">End Point</label>
-                            <input type="text" name="endPoint" required value={formData.endPoint} onChange={handleChange} className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">End Point</label>
+                            <input type="text" name="endPoint" required value={formData.endPoint} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" />
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Total Distance (km)</label>
-                            <input type="number" name="totalDistance" value={formData.totalDistance} onChange={handleChange} className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Total Distance (km)</label>
+                            <input type="number" name="totalDistance" value={formData.totalDistance} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Est. Time</label>
-                            <input type="text" name="estimatedTime" value={formData.estimatedTime} onChange={handleChange} className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. 45 mins" />
+                            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Est. Time</label>
+                            <input type="text" name="estimatedTime" value={formData.estimatedTime} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="e.g. 45 mins" />
                         </div>
                     </div>
 
-                    <div className="border-t border-gray-200 pt-4">
+                    <div className="border-t border-slate-200 pt-5">
                         <div className="flex justify-between items-center mb-4">
-                            <h4 className="font-bold text-gray-800">Route Stages</h4>
-                            <button type="button" onClick={addStage} className="text-sm text-indigo-600 font-semibold hover:underline">+ Add Stage</button>
+                            <h4 className="font-bold text-slate-800">Route Stages</h4>
+                            <button type="button" onClick={addStage} className="text-sm bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-100 transition-colors">+ Add Stage</button>
                         </div>
-                        <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                        <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                            {formData.stages.length === 0 && (
+                                <p className="text-sm text-slate-400 italic text-center py-4">No stages added yet. Click "+ Add Stage" to begin.</p>
+                            )}
                             {formData.stages.map((stage, index) => (
-                                <div key={index} className="bg-gray-50 p-4 rounded-lg relative border border-gray-200">
-                                    <button type="button" onClick={() => removeStage(index)} className="absolute top-2 right-2 text-red-400 hover:text-red-600">✕</button>
-                                    <div className="grid grid-cols-2 gap-3 mb-2">
-                                        <input type="text" name="stageName" placeholder="Stage Name" value={stage.stageName} onChange={(e) => handleStageChange(index, e)} className="w-full px-3 py-2 rounded border border-gray-300 text-sm" required />
-                                        <input type="number" name="distanceFromStart" placeholder="Dist. from Start (km)" value={stage.distanceFromStart} onChange={(e) => handleStageChange(index, e)} className="w-full px-3 py-2 rounded border border-gray-300 text-sm" required />
+                                <div key={index} className="bg-slate-50 p-3 rounded-xl relative border border-slate-200 group">
+                                    <button type="button" onClick={() => removeStage(index)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500 transition-colors">
+                                        <Trash2 size={16} />
+                                    </button>
+                                    <div className="flex items-center mb-3">
+                                        <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs mr-2">
+                                            {index + 1}
+                                        </span>
+                                        <span className="text-sm font-medium text-slate-700">Stage Details</span>
                                     </div>
-                                    <div className="grid grid-cols-1 gap-3">
-                                        <input type="number" name="fare" placeholder="Fare (₹)" value={stage.fare} onChange={(e) => handleStageChange(index, e)} className="w-full px-3 py-2 rounded border border-gray-300 text-sm" required />
+                                    <div className="grid grid-cols-2 gap-3 mb-3">
+                                        <input type="text" name="stageName" placeholder="Stage Name" value={stage.stageName} onChange={(e) => handleStageChange(index, e)} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+                                        <input type="number" name="distanceFromStart" placeholder="Km from Start" value={stage.distanceFromStart} onChange={(e) => handleStageChange(index, e)} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+                                    </div>
+                                    <div>
+                                        <div className="relative">
+                                            <IndianRupee size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <input type="number" name="fare" placeholder="Fare Amount" value={stage.fare} onChange={(e) => handleStageChange(index, e)} className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+                                        </div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     </div>
 
-                    <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 transition-colors">
+                    <button type="submit" className="w-full bg-blue-900 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 mt-2">
                         {editingId ? 'Update Route Structure' : 'Create Route Structure'}
                     </button>
                 </form>

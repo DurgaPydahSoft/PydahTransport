@@ -1,5 +1,6 @@
 const { getEmployeeModel } = require('../models/Employee');
 const UserRole = require('../models/UserRole');
+const Admin = require('../models/Admin');
 
 // @desc    Get all users (Employees + Roles)
 // @route   GET /api/users
@@ -47,7 +48,21 @@ const getUsers = async (req, res) => {
             };
         });
 
-        res.json(mergedUsers); // Return list
+        // 0. Fetch Super Admins
+        const admins = await Admin.find({}).select('-password').lean();
+        const formattedAdmins = admins.map(admin => ({
+            _id: admin._id,
+            emp_no: 'ADMIN',
+            employee_name: admin.username === 'admin' ? 'Super Admin' : admin.username,
+            roles: ['superadmin'],
+            permissions: ['all'],
+            is_active: true,
+            is_superadmin: true // Flag for frontend
+        }));
+
+        const allUsers = [...formattedAdmins, ...mergedUsers];
+
+        res.json(allUsers); // Return list
     } catch (error) {
         console.error('Error fetching users:', error);
         res.status(500).json({ message: 'Failed to fetch users' });

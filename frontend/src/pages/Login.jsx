@@ -35,16 +35,32 @@ const Login = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
-                <div className="absolute w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 top-0 -left-20 animate-blob"></div>
-                <div className="absolute w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 bottom-0 -right-20 animate-blob animation-delay-2000"></div>
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4 relative overflow-hidden font-inter">
+            {/* Background Image */}
+            <div className="absolute inset-0 z-0">
+                <img
+                    src="https://images.unsplash.com/photo-1570125909232-eb263c188f7e?q=80&w=2071&auto=format&fit=crop"
+                    alt="Bus Background"
+                    className="w-full h-full object-cover opacity-20"
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-slate-900/50 via-slate-900/20 to-slate-900/90"></div>
             </div>
 
-            <div className="bg-white p-10 rounded-2xl shadow-xl w-full max-w-md relative z-10 border border-gray-100">
-                <div className="text-center mb-8">
-                    <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 mb-2">Welcome Back</h1>
-                    <p className="text-gray-500 text-sm">Sign in to access the transport dashboard</p>
+            <div className="bg-white/90 backdrop-blur-md p-8 rounded-2xl shadow-2xl w-full max-w-md relative z-10 border border-white/20">
+                {/* Home Button */}
+                <button
+                    onClick={() => navigate('/')}
+                    className="absolute top-4 left-4 text-slate-400 hover:text-slate-800 transition-colors p-2 rounded-full hover:bg-slate-100/50"
+                    title="Back to Home"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                </button>
+
+                <div className="text-center mb-8 mt-2">
+                    <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Welcome Back</h1>
+                    <p className="text-slate-500 text-sm font-medium">Sign in to access the transport dashboard</p>
                 </div>
 
                 {error && (
@@ -55,13 +71,13 @@ const Login = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
-                        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="username">
+                        <label className="block text-slate-700 text-sm font-bold mb-2" htmlFor="username">
                             Username
                         </label>
                         <input
                             type="text"
                             id="username"
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+                            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all bg-white/50 focus:bg-white text-slate-800"
                             placeholder="Enter your admin ID"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
@@ -70,15 +86,15 @@ const Login = () => {
                     </div>
                     <div>
                         <div className="flex justify-between items-center mb-2">
-                            <label className="block text-gray-700 text-sm font-semibold" htmlFor="password">
+                            <label className="block text-slate-700 text-sm font-bold" htmlFor="password">
                                 Password
                             </label>
-                            <a href="#" className="text-xs text-blue-600 hover:text-blue-800">Forgot password?</a>
+                            <a href="#" className="text-xs text-slate-600 hover:text-slate-900 font-medium">Forgot password?</a>
                         </div>
                         <input
                             type="password"
                             id="password"
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
+                            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all bg-white/50 focus:bg-white text-slate-800"
                             placeholder="••••••••"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
@@ -87,14 +103,14 @@ const Login = () => {
                     </div>
                     <button
                         type="submit"
-                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-3 px-4 rounded-xl hover:shadow-lg hover:shadow-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transform transition-all active:scale-95"
+                        className="w-full bg-slate-900 text-white font-bold py-3 px-4 rounded-xl hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transform transition-all active:scale-95"
                     >
                         Sign In
                     </button>
                 </form>
 
-                <div className="mt-8 text-center border-t border-gray-100 pt-6">
-                    <p className="text-gray-400 text-xs">
+                <div className="mt-8 text-center border-t border-slate-200/60 pt-6">
+                    <p className="text-slate-400 text-xs font-medium">
                         Protected by Pydah Transport Security Systems
                     </p>
                 </div>
