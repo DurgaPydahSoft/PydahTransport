@@ -12,7 +12,7 @@ const Home = () => {
                     alt="Bus Background"
                     className="w-full h-full object-cover opacity-20"
                 />
-                <div className="absolute inset-0 bg-slate-900/70"></div>
+                <div className="absolute inset-0 bg-slate-900 opacity-70"></div>
             </div>
 
             {/* Main Content Container - Centered Vertically */}
@@ -28,7 +28,7 @@ const Home = () => {
 
                 <main className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full">
                     {/* Student Portal Card */}
-                    <div className="bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-2xl hover:shadow-blue-500/20 transition-all duration-300 border border-white/20 flex flex-col items-center text-center group hover:-translate-y-1">
+                    <div className="bg-white p-6 rounded-2xl shadow-2xl hover:shadow-xl transition-all duration-300 border border-slate-200 flex flex-col items-center text-center group hover:-translate-y-1">
                         <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors shadow-inner">
                             <Bus className="w-6 h-6 text-blue-600 transform group-hover:scale-110 transition-transform duration-300" />
                         </div>
@@ -42,7 +42,7 @@ const Home = () => {
                     </div>
 
                     {/* Admin Portal Card */}
-                    <div className="bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 border border-white/20 flex flex-col items-center text-center group hover:-translate-y-1">
+                    <div className="bg-white p-6 rounded-2xl shadow-2xl hover:shadow-xl transition-all duration-300 border border-slate-200 flex flex-col items-center text-center group hover:-translate-y-1">
                         <div className="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-indigo-200 transition-colors shadow-inner">
                             <Map className="w-6 h-6 text-indigo-600 transform group-hover:scale-110 transition-transform duration-300" />
                         </div>
@@ -50,7 +50,7 @@ const Home = () => {
                         <p className="text-slate-600 mb-6 flex-1 text-sm">
                             Comprehensive management of fleets, routes, stages, and fee approvals for transport managers.
                         </p>
-                        <Link to="/login" className="inline-block bg-slate-900 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-900/30 transition-all w-full transform active:scale-95 text-sm">
+                        <Link to="/login" className="inline-block bg-slate-900 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-slate-800 hover:shadow-lg transition-all w-full transform active:scale-95 text-sm">
                             Admin Login
                         </Link>
                     </div>

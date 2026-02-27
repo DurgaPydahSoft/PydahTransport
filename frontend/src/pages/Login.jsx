@@ -48,14 +48,14 @@ const Login = () => {
                     alt="Bus Background"
                     className="w-full h-full object-cover opacity-20"
                 />
-                <div className="absolute inset-0 bg-slate-900/70"></div>
+                <div className="absolute inset-0 bg-slate-900 opacity-70"></div>
             </div>
 
-            <div className="bg-white/90 backdrop-blur-md p-8 rounded-2xl shadow-2xl w-full max-w-md relative z-10 border border-white/20">
+            <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md relative z-10 border border-slate-200">
                 {/* Home Button */}
                 <button
                     onClick={() => navigate('/')}
-                    className="absolute top-4 left-4 text-slate-400 hover:text-slate-800 transition-colors p-2 rounded-full hover:bg-slate-100/50"
+                    className="absolute top-4 left-4 text-slate-400 hover:text-slate-800 transition-colors p-2 rounded-full hover:bg-slate-100"
                     title="Back to Home"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -82,7 +82,7 @@ const Login = () => {
                         <input
                             type="text"
                             id="username"
-                            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all bg-white/50 focus:bg-white text-slate-800"
+                            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all bg-slate-50 focus:bg-white text-slate-800"
                             placeholder="Enter your admin ID"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
@@ -99,7 +99,7 @@ const Login = () => {
                         <input
                             type="password"
                             id="password"
-                            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all bg-white/50 focus:bg-white text-slate-800"
+                            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all bg-slate-50 focus:bg-white text-slate-800"
                             placeholder="••••••••"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
@@ -111,7 +111,7 @@ const Login = () => {
                         disabled={isLoading}
                         className={`w-full text-white font-bold py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transform transition-all flex items-center justify-center gap-2 ${isLoading
                             ? 'bg-slate-700 cursor-not-allowed'
-                            : 'bg-slate-900 hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-900/20 active:scale-95'
+                            : 'bg-slate-900 hover:bg-slate-800 hover:shadow-lg active:scale-95'
                             }`}
                     >
                         {isLoading ? (
@@ -128,7 +128,7 @@ const Login = () => {
                     </button>
                 </form>
 
-                <div className="mt-8 text-center border-t border-slate-200/60 pt-6">
+                <div className="mt-8 text-center border-t border-slate-200 pt-6">
                     <p className="text-slate-400 text-xs font-medium">
                         Protected by Pydah Transport Security Systems
                     </p>

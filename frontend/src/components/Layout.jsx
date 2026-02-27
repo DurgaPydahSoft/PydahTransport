@@ -115,7 +115,7 @@ const Layout = ({ children }) => {
             {/* Mobile Sidebar Overlay */}
             {isMobileMenuOpen && (
                 <div
-                    className="fixed inset-0 bg-black/50 z-30 md:hidden backdrop-blur-sm"
+                    className="fixed inset-0 bg-black opacity-50 z-30 md:hidden"
                     onClick={() => setIsMobileMenuOpen(false)}
                 ></div>
             )}
