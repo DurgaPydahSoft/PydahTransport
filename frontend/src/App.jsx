@@ -9,6 +9,8 @@ import RouteManagement from './pages/RouteManagement';
 import TransportRequests from './pages/TransportRequests';
 import TransportDues from './pages/TransportDues';
 import UserManagement from './pages/UserManagement';
+import AdminRaiseRequest from './pages/AdminRaiseRequest';
+import Concessions from './pages/Concessions';
 import './App.css';
 
 function App() {
@@ -26,6 +28,8 @@ function App() {
           <Route path="/transport-requests" element={<TransportRequests />} />
           <Route path="/transport-dues" element={<TransportDues />} />
           <Route path="/users" element={<UserManagement />} />
+          <Route path="/raise-request" element={<AdminRaiseRequest />} />
+          <Route path="/concessions" element={<Concessions />} />
         </Routes>
       </div>
     </Router>

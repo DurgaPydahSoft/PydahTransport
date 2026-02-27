@@ -48,7 +48,7 @@ const Login = () => {
                     alt="Bus Background"
                     className="w-full h-full object-cover opacity-20"
                 />
-                <div className="absolute inset-0 bg-gradient-to-b from-slate-900/50 via-slate-900/20 to-slate-900/90"></div>
+                <div className="absolute inset-0 bg-slate-900/70"></div>
             </div>
 
             <div className="bg-white/90 backdrop-blur-md p-8 rounded-2xl shadow-2xl w-full max-w-md relative z-10 border border-white/20">
@@ -110,8 +110,8 @@ const Login = () => {
                         type="submit"
                         disabled={isLoading}
                         className={`w-full text-white font-bold py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transform transition-all flex items-center justify-center gap-2 ${isLoading
-                                ? 'bg-slate-700 cursor-not-allowed'
-                                : 'bg-slate-900 hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-900/20 active:scale-95'
+                            ? 'bg-slate-700 cursor-not-allowed'
+                            : 'bg-slate-900 hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-900/20 active:scale-95'
                             }`}
                     >
                         {isLoading ? (

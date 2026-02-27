@@ -10,7 +10,9 @@ import {
     UserCog,
     LogOut,
     Menu,
-    X
+    X,
+    PlusCircle,
+    Percent
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -40,6 +42,8 @@ const Layout = ({ children }) => {
         { path: '/fleet', label: 'Fleet & Passengers', permission: 'fleet_passengers', icon: <Users size={20} /> },
         { path: '/routes', label: 'Route Management', permission: 'route_management', icon: <Map size={20} /> },
         { path: '/transport-requests', label: 'Requests', permission: 'transport_requests', icon: <ClipboardList size={20} /> },
+        { path: '/raise-request', label: 'Raise Request', permission: 'transport_requests', icon: <PlusCircle size={20} /> },
+        { path: '/concessions', label: 'Concessions', permission: 'transport_dues', icon: <Percent size={20} /> },
         { path: '/transport-dues', label: 'Transport Dues', permission: 'transport_dues', icon: <CreditCard size={20} /> },
         { path: '/users', label: 'User Management', permission: 'user_management', icon: <UserCog size={20} /> },
     ];
@@ -57,7 +61,7 @@ const Layout = ({ children }) => {
                             alt="Logo"
                             className="h-15 w-auto object-contain"
                         />
-                        <h1 className="text-l font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-900 to-indigo-900 truncate tracking-wide">
+                        <h1 className="text-l font-bold text-blue-900 truncate tracking-wide">
                             PYDAH TRANSPORT
                         </h1>
                     </div>

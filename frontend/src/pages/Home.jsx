@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Bus, Map } from 'lucide-react';
 
 const Home = () => {
     return (
@@ -11,7 +12,7 @@ const Home = () => {
                     alt="Bus Background"
                     className="w-full h-full object-cover opacity-20"
                 />
-                <div className="absolute inset-0 bg-gradient-to-b from-slate-900/50 via-slate-900/20 to-slate-900/90"></div>
+                <div className="absolute inset-0 bg-slate-900/70"></div>
             </div>
 
             {/* Main Content Container - Centered Vertically */}
@@ -29,7 +30,7 @@ const Home = () => {
                     {/* Student Portal Card */}
                     <div className="bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-2xl hover:shadow-blue-500/20 transition-all duration-300 border border-white/20 flex flex-col items-center text-center group hover:-translate-y-1">
                         <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors shadow-inner">
-                            <div className="text-2xl transform group-hover:scale-110 transition-transform duration-300">🚌</div>
+                            <Bus className="w-6 h-6 text-blue-600 transform group-hover:scale-110 transition-transform duration-300" />
                         </div>
                         <h2 className="text-xl font-bold text-slate-800 mb-2">Student & Staff Portal</h2>
                         <p className="text-slate-600 mb-6 flex-1 text-sm">
@@ -43,7 +44,7 @@ const Home = () => {
                     {/* Admin Portal Card */}
                     <div className="bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-2xl hover:shadow-indigo-500/20 transition-all duration-300 border border-white/20 flex flex-col items-center text-center group hover:-translate-y-1">
                         <div className="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-indigo-200 transition-colors shadow-inner">
-                            <div className="text-2xl transform group-hover:scale-110 transition-transform duration-300">🗺️</div>
+                            <Map className="w-6 h-6 text-indigo-600 transform group-hover:scale-110 transition-transform duration-300" />
                         </div>
                         <h2 className="text-xl font-bold text-slate-800 mb-2">Administrative Control</h2>
                         <p className="text-slate-600 mb-6 flex-1 text-sm">
