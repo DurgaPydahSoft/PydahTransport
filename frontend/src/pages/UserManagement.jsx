@@ -27,6 +27,8 @@ const UserManagement = () => {
         { id: 'transport_requests', label: 'Transport Requests' },
         { id: 'transport_dues', label: 'Transport Dues' },
         { id: 'user_management', label: 'User Management' },
+        { id: 'raise_request', label: 'Raise Request' },
+        { id: 'concessions', label: 'Concessions' },
     ];
 
     useEffect(() => {
@@ -249,8 +251,8 @@ const UserManagement = () => {
                                             <div className="flex flex-wrap gap-1">
                                                 {user.roles && user.roles.map(role => (
                                                     <span key={role} className={`px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${role === 'superadmin'
-                                                            ? 'bg-purple-100 text-purple-800 border-purple-200'
-                                                            : 'bg-blue-100 text-blue-800 border-blue-200'
+                                                        ? 'bg-purple-100 text-purple-800 border-purple-200'
+                                                        : 'bg-blue-100 text-blue-800 border-blue-200'
                                                         }`}>
                                                         {role === 'superadmin' ? 'Super Admin' : role}
                                                     </span>
