@@ -1,5 +1,6 @@
 const Admin = require('../models/Admin');
 const { getEmployeeModel } = require('../models/Employee');
+const { getUserModel } = require('../models/User'); // Import the new User model
 const UserRole = require('../models/UserRole');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -50,6 +51,40 @@ const loginUser = async (req, res) => {
                         roles: userRole ? userRole.roles : ['user'],
                         permissions: userRole ? userRole.permissions : [],
                         token: generateToken(employee._id)
+                    });
+                }
+            }
+        }
+
+        // 3. Try User (HRMS users collection)
+        const User = getUserModel();
+        if (User) {
+            // Check if username matches email or employeeId
+            const user = await User.findOne({
+                $or: [
+                    { email: username },
+                    { employeeId: username }
+                ],
+                isActive: true // Ensure user is active
+            });
+
+            if (user) {
+                const isMatch = await bcrypt.compare(password, user.password);
+
+                if (isMatch) {
+                    // Update last login (optional but good practice)
+                    await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
+
+                    return res.json({
+                        _id: user._id,
+                        username: user.email, // or user.employeeId based on preference
+                        name: user.name,
+                        roles: user.roles || ['user'],
+                        permissions: user.featureControl || [],
+                        scope: user.scope,
+                        dataScope: user.dataScope,
+                        divisionMapping: user.divisionMapping,
+                        token: generateToken(user._id)
                     });
                 }
             }
