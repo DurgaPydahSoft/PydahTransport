@@ -31,6 +31,24 @@ const searchStudents = async (req, res) => {
     }
 };
 
+// @desc    Get all courses from MySQL
+// @route   GET /api/students/courses
+// @access  Private/Admin
+const getCourses = async (req, res) => {
+    try {
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
+        const [rows] = await mysqlPool.query('SELECT id, name, code FROM courses WHERE is_active = 1 ORDER BY name ASC');
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching courses:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
-    searchStudents
+    searchStudents,
+    getCourses
 };

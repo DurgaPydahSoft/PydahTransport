@@ -132,26 +132,39 @@ const getTransportRequests = async (req, res) => {
         if (!mysqlPool) {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
-        const { route_id, status, bus_id } = req.query;
-        let sql = 'SELECT * FROM transport_requests WHERE 1=1';
+        const { route_id, status, bus_id, course } = req.query;
+        let sql = 'SELECT tr.* FROM transport_requests tr';
         const params = [];
+
+        // Join with students table if course filter is needed
+        if (course) {
+            sql += ' LEFT JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)';
+        }
+
+        sql += ' WHERE 1=1';
+
         if (route_id) {
-            sql += ' AND route_id = ?';
+            sql += ' AND tr.route_id = ?';
             params.push(route_id);
         }
         if (status) {
-            sql += ' AND status = ?';
+            sql += ' AND tr.status = ?';
             params.push(status);
         }
         if (bus_id !== undefined) {
             if (bus_id === '' || bus_id === 'unassigned') {
-                sql += ' AND (bus_id IS NULL OR bus_id = \'\')';
+                sql += ' AND (tr.bus_id IS NULL OR tr.bus_id = \'\')';
             } else {
-                sql += ' AND bus_id = ?';
+                sql += ' AND tr.bus_id = ?';
                 params.push(bus_id);
             }
         }
-        sql += ' ORDER BY request_date DESC';
+        if (course) {
+            sql += ' AND s.course = ?';
+            params.push(course);
+        }
+
+        sql += ' ORDER BY tr.request_date DESC';
         const [rows] = await mysqlPool.query(sql, params);
         res.json(rows);
     } catch (error) {

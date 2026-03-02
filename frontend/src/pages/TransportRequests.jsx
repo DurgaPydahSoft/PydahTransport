@@ -11,7 +11,9 @@ const formatDate = (d) => (d ? new Date(d).toLocaleDateString() : '—');
 const TransportRequests = () => {
     const [requests, setRequests] = useState([]);
     const [routes, setRoutes] = useState([]);
+    const [courses, setCourses] = useState([]);
     const [routeFilter, setRouteFilter] = useState('');
+    const [courseFilter, setCourseFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(null);
     const [message, setMessage] = useState({ text: '', type: '' });
@@ -20,9 +22,13 @@ const TransportRequests = () => {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const url = routeFilter
-                ? `${API_BASE}/transport-requests?route_id=${encodeURIComponent(routeFilter)}`
-                : `${API_BASE}/transport-requests`;
+            let url = `${API_BASE}/transport-requests?`;
+            const params = new URLSearchParams();
+            if (routeFilter) params.append('route_id', routeFilter);
+            if (courseFilter) params.append('course', courseFilter);
+
+            url += params.toString();
+
             const response = await fetch(url);
             if (response.ok) {
                 const data = await response.json();
@@ -49,13 +55,35 @@ const TransportRequests = () => {
         }
     };
 
+    const fetchCourses = async () => {
+        try {
+            const response = await fetch(`${API_BASE}/students/courses`);
+            if (response.ok) {
+                const data = await response.json();
+                setCourses(data);
+            }
+        } catch (e) {
+            console.error('Error fetching courses:', e);
+        }
+    };
+
     useEffect(() => {
         fetchRoutes();
+        fetchCourses();
     }, []);
 
     useEffect(() => {
         fetchRequests();
-    }, [routeFilter]);
+    }, [routeFilter, courseFilter]);
+
+    const calculateStats = () => {
+        const total = requests.length;
+        const approved = requests.filter(r => (r.status || '').toLowerCase() === 'approved').length;
+        const pending = requests.filter(r => (r.status || '').toLowerCase() === 'pending').length;
+        return { total, approved, pending };
+    };
+
+    const stats = calculateStats();
 
     const openApproveModal = async (requestId) => {
         setApproveModal({ open: true, requestId, data: null, loading: true, error: null });
@@ -136,33 +164,81 @@ const TransportRequests = () => {
                 <p className="text-gray-500 mt-1">View, approve, or reject student transport requests. Approval creates the transport fee (TRN01) in Fee Management.</p>
             </div>
 
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+                    <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-gray-500">Total Requests</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+                    <div className="p-3 bg-green-50 rounded-xl text-green-600">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-gray-500">Approved</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.approved}</p>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+                    <div className="p-3 bg-yellow-50 rounded-xl text-yellow-600">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-gray-500">Pending</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.pending}</p>
+                    </div>
+                </div>
+            </div>
+
             {message.text && (
                 <div className={`mb-6 p-4 rounded-xl border ${message.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
                     {message.text}
                 </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-4 mb-6">
+            <div className="flex flex-wrap items-center gap-6 mb-6">
                 <label className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700">Filter by route</span>
+                    <span className="text-sm font-medium text-gray-700">Filter by Route</span>
                     <select
                         value={routeFilter}
                         onChange={(e) => setRouteFilter(e.target.value)}
-                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[200px]"
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[200px] outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                        <option value="">All routes</option>
+                        <option value="">All Routes</option>
                         {routes.map((r) => (
                             <option key={r._id} value={r.routeId}>{r.routeName} ({r.routeId})</option>
                         ))}
                     </select>
                 </label>
-                {routeFilter && (
-                    <span className="text-sm text-gray-500">
-                        Showing requests for selected route
-                    </span>
+
+                <label className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700">Filter by Course</span>
+                    <select
+                        value={courseFilter}
+                        onChange={(e) => setCourseFilter(e.target.value)}
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[200px] outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="">All Courses</option>
+                        {courses.map((c) => (
+                            <option key={c.id} value={c.name}>{c.name}</option>
+                        ))}
+                    </select>
+                </label>
+
+                {(routeFilter || courseFilter) && (
+                    <button
+                        onClick={() => { setRouteFilter(''); setCourseFilter(''); }}
+                        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                        Clear Filters
+                    </button>
                 )}
             </div>
-
             {loading ? (
                 <div className="text-center py-20 text-gray-500">Loading requests...</div>
             ) : requests.length === 0 ? (
@@ -234,7 +310,8 @@ const TransportRequests = () => {
                         </table>
                     </div>
                 </div>
-            )}
+            )
+            }
 
             <Modal
                 isOpen={approveModal.open}
@@ -305,7 +382,7 @@ const TransportRequests = () => {
                     </>
                 )}
             </Modal>
-        </Layout>
+        </Layout >
     );
 };
 
