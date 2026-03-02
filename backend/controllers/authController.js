@@ -1,6 +1,6 @@
 const Admin = require('../models/Admin');
 const { getEmployeeModel } = require('../models/Employee');
-const { getUserModel } = require('../models/User'); // Import the new User model
+const { getEmployeeConnection } = require('../config/db'); // Direct connection for 'users' collection
 const UserRole = require('../models/UserRole');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -30,7 +30,7 @@ const loginUser = async (req, res) => {
             });
         }
 
-        // 2. Try Employee (HRMS)
+        // 2. Try Employee (HRMS employees collection)
         const Employee = getEmployeeModel();
         if (Employee) {
             const employee = await Employee.findOne({ emp_no: username });
@@ -57,34 +57,37 @@ const loginUser = async (req, res) => {
         }
 
         // 3. Try User (HRMS users collection)
-        const User = getUserModel();
-        if (User) {
-            // Check if username matches email or employeeId
-            const user = await User.findOne({
+        const employeeConn = getEmployeeConnection();
+        if (employeeConn) {
+            const usersCollection = employeeConn.collection('users');
+            
+            // Query by email, employeeId, or simply checking if the username matches the name/email prefixes
+            const user = await usersCollection.findOne({
                 $or: [
                     { email: username },
                     { employeeId: username }
                 ],
-                isActive: true // Ensure user is active
+                isActive: true
             });
 
             if (user) {
                 const isMatch = await bcrypt.compare(password, user.password);
 
                 if (isMatch) {
-                    // Update last login (optional but good practice)
-                    await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
+                    // The core fix: Look up the Local UserRole based on the Employee Reference pointer!
+                    const userRole = await UserRole.findOne({ employeeId: user.employeeRef });
+
+                    // Optional: Update last login natively
+                    await usersCollection.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
 
                     return res.json({
-                        _id: user._id,
-                        username: user.email, // or user.employeeId based on preference
+                        // Return the employeeRef so the frontend system treats them identically to an 'Employee' login
+                        _id: user.employeeRef, 
+                        username: user.email,
                         name: user.name,
-                        roles: user.roles || ['user'],
-                        permissions: user.featureControl || [],
-                        scope: user.scope,
-                        dataScope: user.dataScope,
-                        divisionMapping: user.divisionMapping,
-                        token: generateToken(user._id)
+                        roles: userRole ? userRole.roles : ['user'],
+                        permissions: userRole ? userRole.permissions : [],
+                        token: generateToken(user.employeeRef)
                     });
                 }
             }
