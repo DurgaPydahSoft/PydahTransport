@@ -132,14 +132,9 @@ const getTransportRequests = async (req, res) => {
         if (!mysqlPool) {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
-        const { route_id, status, bus_id, course } = req.query;
-        let sql = 'SELECT tr.* FROM transport_requests tr';
+        const { route_id, status, bus_id, course, search } = req.query;
+        let sql = 'SELECT tr.*, s.course FROM transport_requests tr LEFT JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)';
         const params = [];
-
-        // Join with students table if course filter is needed
-        if (course) {
-            sql += ' LEFT JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)';
-        }
 
         sql += ' WHERE 1=1';
 
@@ -162,6 +157,11 @@ const getTransportRequests = async (req, res) => {
         if (course) {
             sql += ' AND s.course = ?';
             params.push(course);
+        }
+        if (search) {
+            sql += ' AND (tr.student_name LIKE ? OR tr.admission_number LIKE ?)';
+            const searchPattern = `%${search}%`;
+            params.push(searchPattern, searchPattern);
         }
 
         sql += ' ORDER BY tr.request_date DESC';
@@ -494,7 +494,7 @@ const getConcessions = async (req, res) => {
 
         // 2. Cross-reference with StudentFee in MongoDB to get the current allocated amount
         const admissionNumbers = requests.map(r => String(r.admission_number || r.admission_no));
-        
+
         const fees = await StudentFee.find({
             studentId: { $in: admissionNumbers },
             feeHead: transportFeeHead._id

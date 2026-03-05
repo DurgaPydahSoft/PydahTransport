@@ -14,6 +14,10 @@ const TransportRequests = () => {
     const [courses, setCourses] = useState([]);
     const [routeFilter, setRouteFilter] = useState('');
     const [courseFilter, setCourseFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [rowsPerPage, setRowsPerPage] = useState(10);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(null);
     const [message, setMessage] = useState({ text: '', type: '' });
@@ -26,6 +30,8 @@ const TransportRequests = () => {
             const params = new URLSearchParams();
             if (routeFilter) params.append('route_id', routeFilter);
             if (courseFilter) params.append('course', courseFilter);
+            if (statusFilter) params.append('status', statusFilter);
+            if (searchQuery) params.append('search', searchQuery);
 
             url += params.toString();
 
@@ -74,7 +80,8 @@ const TransportRequests = () => {
 
     useEffect(() => {
         fetchRequests();
-    }, [routeFilter, courseFilter]);
+        setCurrentPage(1);
+    }, [routeFilter, courseFilter, statusFilter, searchQuery]);
 
     const calculateStats = () => {
         const total = requests.length;
@@ -84,6 +91,12 @@ const TransportRequests = () => {
     };
 
     const stats = calculateStats();
+
+    // Pagination logic
+    const indexOfLastRow = currentPage * rowsPerPage;
+    const indexOfFirstRow = indexOfLastRow - rowsPerPage;
+    const currentRequests = requests.slice(indexOfFirstRow, indexOfLastRow);
+    const totalPages = Math.ceil(requests.length / rowsPerPage);
 
     const openApproveModal = async (requestId) => {
         setApproveModal({ open: true, requestId, data: null, loading: true, error: null });
@@ -201,42 +214,66 @@ const TransportRequests = () => {
                 </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-6 mb-6">
-                <label className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700">Filter by Route</span>
+            <div className="flex w-full items-center gap-2 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <div className="flex-[2] min-w-0 relative">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    <input
+                        type="text"
+                        placeholder="Search name/ID..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-2 py-2 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
+                    />
+                </div>
+
+                <div className="flex-1 min-w-0">
                     <select
                         value={routeFilter}
                         onChange={(e) => setRouteFilter(e.target.value)}
-                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[200px] outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-xl border border-gray-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all text-ellipsis"
                     >
                         <option value="">All Routes</option>
                         {routes.map((r) => (
                             <option key={r._id} value={r.routeId}>{r.routeName} ({r.routeId})</option>
                         ))}
                     </select>
-                </label>
+                </div>
 
-                <label className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700">Filter by Course</span>
+                <div className="flex-1 min-w-0">
                     <select
                         value={courseFilter}
                         onChange={(e) => setCourseFilter(e.target.value)}
-                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm min-w-[200px] outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full rounded-xl border border-gray-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all text-ellipsis"
                     >
                         <option value="">All Courses</option>
                         {courses.map((c) => (
                             <option key={c.id} value={c.name}>{c.name}</option>
                         ))}
                     </select>
-                </label>
+                </div>
 
-                {(routeFilter || courseFilter) && (
-                    <button
-                        onClick={() => { setRouteFilter(''); setCourseFilter(''); }}
-                        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                <div className="flex-1 min-w-0">
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all text-ellipsis"
                     >
-                        Clear Filters
-                    </button>
+                        <option value="">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+
+                {(routeFilter || courseFilter || statusFilter || searchQuery) && (
+                    <div className="flex-shrink-0">
+                        <button
+                            onClick={() => { setRouteFilter(''); setCourseFilter(''); setStatusFilter(''); setSearchQuery(''); }}
+                            className="text-sm text-red-600 hover:text-red-700 font-semibold px-3 py-2 border border-red-100 bg-red-50 rounded-xl transition-all"
+                        >
+                            Reset
+                        </button>
+                    </div>
                 )}
             </div>
             {loading ? (
@@ -247,12 +284,54 @@ const TransportRequests = () => {
                 </div>
             ) : (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    {/* Pagination Controls */}
+                    <div className="p-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4 bg-gray-50/80">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600 font-medium">Rows per page:</span>
+                            <select
+                                value={rowsPerPage}
+                                onChange={(e) => {
+                                    setRowsPerPage(Number(e.target.value));
+                                    setCurrentPage(1);
+                                }}
+                                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm"
+                            >
+                                <option value={10}>10</option>
+                                <option value={20}>20</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <span>
+                                Showing <span className="font-semibold text-gray-900">{indexOfFirstRow + 1}</span> to <span className="font-semibold text-gray-900">{Math.min(indexOfLastRow, requests.length)}</span> of <span className="font-semibold text-gray-900">{requests.length}</span> entries
+                            </span>
+                            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg shadow-sm p-1">
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                    className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                                </button>
+                                <span className="px-3 font-medium text-gray-700 bg-gray-50 py-1 rounded-md border border-gray-100">Page {currentPage} of {totalPages || 1}</span>
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages || totalPages === 0}
+                                    className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
                                     <th className="p-4">Admission No</th>
                                     <th className="p-4">Name</th>
+                                    <th className="p-4">Course</th>
                                     <th className="p-4">Route</th>
                                     <th className="p-4">Stage</th>
                                     <th className="p-4">Fare</th>
@@ -262,10 +341,11 @@ const TransportRequests = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 text-sm text-gray-700">
-                                {requests.map((req) => (
+                                {currentRequests.map((req) => (
                                     <tr key={req.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="p-4 font-medium text-blue-600">{req.admission_number}</td>
-                                        <td className="p-4">{req.student_name}</td>
+                                        <td className="p-4 font-medium text-gray-900">{req.student_name}</td>
+                                        <td className="p-4 text-xs font-semibold uppercase text-gray-500">{req.course || '—'}</td>
                                         <td className="p-4">{req.route_name}</td>
                                         <td className="p-4">{req.stage_name}</td>
                                         <td className="p-4 font-medium text-gray-900">₹{req.fare}</td>
