@@ -36,7 +36,6 @@ const loginUser = async (req, res) => {
             const employee = await Employee.findOne({ emp_no: username });
 
             if (employee) {
-                // Verify password (assuming HRMS uses bcrypt)
                 const isMatch = await bcrypt.compare(password, employee.password);
 
                 if (isMatch) {
@@ -65,7 +64,8 @@ const loginUser = async (req, res) => {
             const user = await usersCollection.findOne({
                 $or: [
                     { email: username },
-                    { employeeId: username }
+                    { employeeId: username },
+                    { emp_no: username }
                 ],
                 isActive: true
             });
