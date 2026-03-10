@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const Login = () => {
     const [username, setUsername] = useState('');
@@ -7,6 +7,45 @@ const Login = () => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const token = params.get('token');
+
+        if (token) {
+            handleSSOLogin(token);
+        }
+    }, [location]);
+
+    const handleSSOLogin = async (ssoToken) => {
+        setIsLoading(true);
+        setError('');
+
+        try {
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/sso-session`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ssoToken }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                localStorage.setItem('adminInfo', JSON.stringify(data));
+                navigate('/dashboard');
+            } else {
+                setError(data.message || 'SSO Login failed');
+            }
+        } catch (err) {
+            console.error('SSO Error:', err);
+            setError('SSO authentication failed. Please try normal login.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();

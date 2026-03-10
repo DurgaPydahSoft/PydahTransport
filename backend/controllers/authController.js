@@ -100,4 +100,85 @@ const loginUser = async (req, res) => {
     }
 };
 
-module.exports = { loginUser };
+// @desc    SSO Token Verification & Login
+// @route   POST /api/auth/sso-session
+// @access  Public
+const ssoLogin = async (req, res) => {
+    const { ssoToken } = req.body;
+
+    if (!ssoToken) {
+        return res.status(400).json({ message: 'SSO token is required' });
+    }
+
+    try {
+        // 1. Verify token with CRM Backend
+        const crmVerifyUrl = `${process.env.CRM_BACKEND_URL || 'http://localhost:8000'}/auth/verify-token`;
+        const verifyResponse = await fetch(crmVerifyUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ encryptedToken: ssoToken })
+        });
+
+        const verifyResult = await verifyResponse.json();
+
+        if (!verifyResult.success || !verifyResult.valid) {
+            return res.status(401).json({ message: verifyResult.message || 'Invalid SSO token' });
+        }
+
+        // Extract data from CRM response
+        const { userId: crmUserId, role: crmRole } = verifyResult.data;
+
+        // 2. Token is valid. Find user in our system.
+        // We use the userId returned by CRM.
+        
+        // Try Employee (HRMS employees collection)
+        const Employee = getEmployeeModel();
+        let userPayload = null;
+
+        if (Employee) {
+            // First try by ID
+            let employee = await Employee.findById(crmUserId);
+            
+            // If not found by ID, try by emp_no
+            if (!employee) {
+                employee = await Employee.findOne({ emp_no: crmUserId });
+            }
+
+            if (employee) {
+                const userRole = await UserRole.findOne({ employeeId: employee._id });
+                userPayload = {
+                    _id: employee._id,
+                    username: employee.emp_no,
+                    name: employee.employee_name,
+                    roles: userRole ? userRole.roles : ['user'],
+                    permissions: userRole ? userRole.permissions : [],
+                    token: generateToken(employee._id)
+                };
+            }
+        }
+
+        // 3. If not found in Employee DB, try Legacy Admin DB
+        if (!userPayload) {
+            const admin = await Admin.findById(crmUserId);
+            if (admin) {
+                userPayload = {
+                    _id: admin._id,
+                    username: admin.username,
+                    role: 'admin',
+                    token: generateToken(admin._id)
+                };
+            }
+        }
+
+        if (userPayload) {
+            return res.json(userPayload);
+        }
+
+        res.status(404).json({ message: 'User not found in Transport system' });
+    } catch (error) {
+        console.error('SSO Login Error:', error);
+        res.status(500).json({ message: 'Internal server error during SSO verification' });
+    }
+};
+
+module.exports = { loginUser, ssoLogin };
