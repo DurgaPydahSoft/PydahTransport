@@ -19,7 +19,7 @@ import {
 
 const API = import.meta.env.VITE_API_URL || '';
 
-const TABS = { buses: 'buses', mapping: 'mapping' };
+const TABS = { buses: 'buses', mapping: 'mapping', staff: 'staff' };
 const VIEW_MODES = { table: 'table', card: 'card' };
 
 const BusManagement = () => {
@@ -32,6 +32,10 @@ const BusManagement = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [assigningBusId, setAssigningBusId] = useState(null);
+    const [drivers, setDrivers] = useState([]);
+    const [cleaners, setCleaners] = useState([]);
+    const [driversLoading, setDriversLoading] = useState(false);
+    const [cleanersLoading, setCleanersLoading] = useState(false);
     const [formData, setFormData] = useState({
         busNumber: '',
         capacity: '',
@@ -63,9 +67,64 @@ const BusManagement = () => {
         }
     };
 
+    const fetchDrivers = async () => {
+        setDriversLoading(true);
+        try {
+            const adminInfo = JSON.parse(localStorage.getItem('adminInfo'));
+            const token = adminInfo?.token;
+
+            if (!token) {
+                console.error('No token found in localStorage');
+                setDrivers([]);
+                return;
+            }
+
+            const response = await fetch(`${API}/employees/drivers`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const data = await response.json();
+            setDrivers(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error('Error fetching drivers:', error);
+            setDrivers([]);
+        } finally {
+            setDriversLoading(false);
+        }
+    };
+
+    const fetchCleaners = async () => {
+        setCleanersLoading(true);
+        try {
+            const adminInfo = JSON.parse(localStorage.getItem('adminInfo'));
+            const token = adminInfo?.token;
+
+            if (!token) {
+                setCleaners([]);
+                return;
+            }
+
+            const response = await fetch(`${API}/employees/cleaners`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const data = await response.json();
+            setCleaners(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error('Error fetching cleaners:', error);
+            setCleaners([]);
+        } finally {
+            setCleanersLoading(false);
+        }
+    };
+
     useEffect(() => {
         fetchBuses();
         fetchRoutes();
+        fetchDrivers();
+        fetchCleaners();
     }, []);
 
     const handleAssignRoute = async (busId, routeId) => {
@@ -221,6 +280,14 @@ const BusManagement = () => {
                     <MapPin size={18} className="mr-2" />
                     Bus–Route mapping
                 </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab(TABS.staff)}
+                    className={`px-4 py-2.5 rounded-t-xl text-sm font-medium transition-colors flex items-center ${activeTab === TABS.staff ? 'bg-white border border-b-0 border-gray-200 text-blue-700 shadow-sm -mb-px' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}
+                >
+                    <Users size={18} className="mr-2" />
+                    Drivers & Cleaners
+                </button>
             </div>
 
             {activeTab === TABS.mapping && (
@@ -273,6 +340,69 @@ const BusManagement = () => {
                                                     ))}
                                                 </select>
                                                 {assigningBusId === bus._id && <span className="text-xs text-blue-500 ml-2 animate-pulse">Saving...</span>}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )
+                    }
+                </div>
+            )}
+
+            {activeTab === TABS.staff && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+                    <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+                        <h3 className="font-semibold text-slate-800">Drivers & Cleaners List</h3>
+                        <p className="text-sm text-slate-500 mt-0.5">List of all drivers and cleaners fetched from HRMS database.</p>
+                    </div>
+                    {(driversLoading || cleanersLoading) ? (
+                        <div className="py-20 flex justify-center">
+                            <Loader size={40} text="Loading staff data..." />
+                        </div>
+                    ) : (drivers.length === 0 && cleaners.length === 0) ? (
+                        <div className="p-12 text-center text-slate-500">No staff found with "DRIVER" or "CLEANER" designation in HRMS.</div>
+                    ) : (
+                        <div className="overflow-x-auto w-full">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold tracking-wider">
+                                        <th className="px-4 py-3">Employee Details</th>
+                                        <th className="px-4 py-3">Role</th>
+                                        <th className="px-4 py-3">Employee ID</th>
+                                        <th className="px-4 py-3">Phone Number</th>
+                                        <th className="px-4 py-3">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {[
+                                        ...drivers.map(d => ({ ...d, role: 'Driver' })),
+                                        ...cleaners.map(c => ({ ...c, role: 'Cleaner' }))
+                                    ].map((staff) => (
+                                        <tr key={staff._id} className="hover:bg-blue-50/30 transition-colors">
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center">
+                                                    <div className={`p-1.5 rounded-lg mr-3 ${staff.role === 'Driver' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
+                                                        <User size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-slate-800 text-sm">{staff.employee_name}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${staff.role === 'Driver' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                                                    {staff.role}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-slate-600 font-medium">{staff.emp_no}</td>
+                                            <td className="px-4 py-3 text-sm text-slate-600">{staff.phone_number || <span className="text-slate-400 italic text-xs">--</span>}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex w-fit items-center ${staff.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-700 border-red-100'}`}>
+                                                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${staff.is_active ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                                    {staff.is_active ? 'Active' : 'Inactive'}
+                                                </span>
                                             </td>
                                         </tr>
                                     ))}
@@ -493,12 +623,32 @@ const BusManagement = () => {
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Driver Name</label>
-                        <input type="text" name="driverName" value={formData.driverName} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="e.g. Ramesh Kumar" />
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Driver</label>
+                        <select
+                            name="driverName"
+                            value={formData.driverName}
+                            onChange={handleChange}
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
+                        >
+                            <option value="">— Select Driver —</option>
+                            {drivers.map(d => (
+                                <option key={d._id} value={d.employee_name}>{d.employee_name} ({d.emp_no})</option>
+                            ))}
+                        </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Attendant Name</label>
-                        <input type="text" name="attendantName" value={formData.attendantName} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="e.g. Suresh Babu" />
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Cleaner (Attendant)</label>
+                        <select
+                            name="attendantName"
+                            value={formData.attendantName}
+                            onChange={handleChange}
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
+                        >
+                            <option value="">— Select Cleaner —</option>
+                            {cleaners.map(c => (
+                                <option key={c._id} value={c.employee_name}>{c.employee_name} ({c.emp_no})</option>
+                            ))}
+                        </select>
                     </div>
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1.5">Status</label>

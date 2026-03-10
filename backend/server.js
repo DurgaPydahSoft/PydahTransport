@@ -14,11 +14,13 @@ app.use(express.urlencoded({ extended: true }));
 const busRoutes = require('./routes/busRoutes');
 const routeRoutes = require('./routes/routeRoutes');
 const authRoutes = require('./routes/authRoutes');
+const employeeRoutes = require('./routes/employeeRoutes');
 
 // Routes
 app.use('/api/buses', busRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/employees', employeeRoutes);
 app.use('/api/transport-requests', require('./routes/transportRequestRoutes'));
 app.use('/api/transport-dues', require('./routes/transportDuesRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));

@@ -11,6 +11,7 @@ const protect = async (req, res, next) => {
     ) {
         try {
             token = req.headers.authorization.split(' ')[1];
+            console.log('Verifying token:', token ? `${token.substring(0, 10)}...` : 'null/undefined');
 
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
@@ -34,6 +35,7 @@ const protect = async (req, res, next) => {
             }
 
             if (!req.user) {
+                console.warn(`User not found for ID: ${decoded.id}`);
                 return res.status(401).json({ message: 'Not authorized, user not found' });
             }
 
@@ -46,7 +48,7 @@ const protect = async (req, res, next) => {
 
             next();
         } catch (error) {
-            console.error(error);
+            console.error('JWT Verification Error:', error);
             res.status(401).json({ message: 'Not authorized, token failed' });
         }
     }
@@ -60,6 +62,7 @@ const admin = (req, res, next) => {
     if (req.user && req.user.roles && req.user.roles.includes('admin')) {
         next();
     } else {
+        console.warn(`Admin access denied for user: ${req.user ? req.user._id : 'Unknown'}. Roles: ${req.user ? JSON.stringify(req.user.roles) : 'none'}`);
         res.status(401).json({ message: 'Not authorized as an admin' });
     }
 };
