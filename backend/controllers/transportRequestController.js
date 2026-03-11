@@ -829,6 +829,139 @@ const deleteConcession = async (req, res) => {
     }
 };
 
+// @desc    Get approved transport passengers for search
+// @route   GET /api/transport-requests/approved-passengers
+// @access  Private/Admin
+const getApprovedPassengers = async (req, res) => {
+    const { q } = req.query;
+    if (!mysqlPool) {
+        return res.status(500).json({ message: 'MySQL connection not established' });
+    }
+
+    try {
+        let sql = `
+            SELECT id, admission_number, student_name, route_id, route_name, stage_name, fare, year_of_study
+            FROM transport_requests
+            WHERE status = 'approved'
+        `;
+        const params = [];
+
+        if (q) {
+            sql += ' AND (student_name LIKE ? OR admission_number LIKE ?)';
+            const searchPattern = `%${q}%`;
+            params.push(searchPattern, searchPattern);
+        }
+
+        sql += ' LIMIT 50';
+        const [rows] = await mysqlPool.query(sql, params);
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching approved passengers:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Submit a route/stage change request (Admin action)
+// @route   POST /api/transport-requests/change-request
+// @access  Private/Admin
+const submitRouteChangeRequest = async (req, res) => {
+    const {
+        admission_number,
+        new_route_id,
+        new_route_name,
+        new_stage_name,
+        new_fare,
+        admin_id,
+        admin_name
+    } = req.body;
+
+    if (!mysqlPool) {
+        return res.status(500).json({ message: 'MySQL connection not established' });
+    }
+
+    try {
+        // 1. Fetch current approved request
+        const [currentRows] = await mysqlPool.query(
+            'SELECT * FROM transport_requests WHERE admission_number = ? AND status = "approved" LIMIT 1',
+            [admission_number]
+        );
+        const currentRequest = currentRows[0];
+        if (!currentRequest) {
+            return res.status(404).json({ message: 'No approved transport request found for this student.' });
+        }
+
+        // 2. Calculate Fare Difference
+        const oldFare = currentRequest.fare || 0;
+        const fareDiff = new_fare - oldFare;
+
+        // 3. Update MySQL Record
+        // We update the existing approved request to the new route/stage
+        await mysqlPool.query(
+            'UPDATE transport_requests SET route_id = ?, route_name = ?, stage_name = ?, fare = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [new_route_id, new_route_name, new_stage_name, new_fare, currentRequest.id]
+        );
+
+        // 4. Update MongoDB Fee if fare exceeds (fareDiff > 0)
+        if (fareDiff > 0) {
+            const { getFeePortalModels } = require('../models/fee-portal-models');
+            const { StudentFee, FeeHead } = await getFeePortalModels();
+
+            // Find Transport Fee Head
+            const transportFeeHead = await FeeHead.findOne({ code: TRANSPORT_FEE_HEAD_CODE });
+            if (!transportFeeHead) {
+                console.error('Transport Fee Head (TRN01) not found for change request adjustment.');
+            } else {
+                // Find existing fee record for the student in current academic year
+                // Note: approveTransportRequest uses resolvedAcademicYear. For simplicity, we assume same year.
+                const academicYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+                
+                const fee = await StudentFee.findOne({
+                    studentId: admission_number,
+                    feeHead: transportFeeHead._id,
+                    academicYear: academicYear
+                });
+
+                if (fee) {
+                    const oldAmount = fee.amount;
+                    fee.amount += fareDiff;
+                    const changeRemark = ` | Change: ${currentRequest.stage_name} -> ${new_stage_name} (+₹${fareDiff})`;
+                    fee.remarks = (fee.remarks || '') + changeRemark;
+                    await fee.save();
+                } else {
+                    // This shouldn't typically happen if they have an approved request, but we handle it
+                    console.warn(`No MongoDB fee record found for student ${admission_number} to adjust.`);
+                }
+            }
+        }
+
+        // Log to audit logs
+        const auditDetails = JSON.stringify({
+            action: 'route_change',
+            admission_number,
+            old_route: currentRequest.route_name,
+            old_stage: currentRequest.stage_name,
+            new_route: new_route_name,
+            new_stage: new_stage_name,
+            fare_diff: fareDiff
+        });
+
+        await mysqlPool.query(
+            'INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) VALUES (?, ?, ?, ?, ?)',
+            ['ROUTE_CHANGE', 'TRANSPORT_REQUEST', String(currentRequest.id), admin_id || null, auditDetails]
+        );
+
+        res.json({
+            message: 'Route change request processed successfully.',
+            fareDifference: fareDiff,
+            newFare: new_fare
+        });
+
+    } catch (error) {
+        console.error('Error processing route change request:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getTransportRequests,
     getSemesterOptions,
@@ -839,5 +972,7 @@ module.exports = {
     getConcessions,
     getDashboardStats,
     updateConcession,
-    deleteConcession
+    deleteConcession,
+    getApprovedPassengers,
+    submitRouteChangeRequest
 };
