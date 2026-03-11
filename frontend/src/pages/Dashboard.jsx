@@ -14,26 +14,37 @@ const Dashboard = () => {
     const [stats, setStats] = useState({
         buses: 0,
         routes: 0,
-        totalDistance: 0
+        totalDistance: 0,
+        totalPassengers: 0,
+        routeBreakdown: [],
+        stageBreakdown: [],
+        courseBreakdown: []
     });
+    const [selectedRouteId, setSelectedRouteId] = useState(null);
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const [busRes, routeRes] = await Promise.all([
+                const [busRes, routeRes, statsRes] = await Promise.all([
                     fetch(`${import.meta.env.VITE_API_URL}/buses`),
-                    fetch(`${import.meta.env.VITE_API_URL}/routes`)
+                    fetch(`${import.meta.env.VITE_API_URL}/routes`),
+                    fetch(`${import.meta.env.VITE_API_URL}/transport-requests/stats`)
                 ]);
 
                 const buses = await busRes.json();
                 const routes = await routeRes.json();
+                const passengerStats = await statsRes.json();
 
                 const totalDist = routes.reduce((acc, curr) => acc + (curr.totalDistance || 0), 0);
 
                 setStats({
                     buses: buses.length,
                     routes: routes.length,
-                    totalDistance: totalDist
+                    totalDistance: totalDist,
+                    totalPassengers: passengerStats.totalPassengers || 0,
+                    routeBreakdown: passengerStats.routeBreakdown || [],
+                    stageBreakdown: passengerStats.stageBreakdown || [],
+                    courseBreakdown: passengerStats.courseBreakdown || []
                 });
             } catch (error) {
                 console.error('Error fetching dashboard stats:', error);
@@ -47,9 +58,9 @@ const Dashboard = () => {
 
     return (
         <Layout>
-            <div className="mb-8">
-                <h2 className="text-3xl font-extrabold text-blue-900 break-words tracking-tight">Dashboard Overview</h2>
-                <p className="text-slate-700 mt-2 font-medium">Welcome back! Here's what's happening today.</p>
+            <div className="mb-6">
+                <h2 className="text-2xl font-extrabold text-blue-900 break-words tracking-tight">Dashboard Overview</h2>
+                <p className="text-slate-500 text-sm font-medium">Insights and analytics for transport management.</p>
             </div>
 
             {loading ? (
@@ -58,59 +69,195 @@ const Dashboard = () => {
                 </div>
             ) : (
                 <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
                         {/* Total Buses Card */}
-                        <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-125"></div>
-                            <div className="relative z-10">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600">
-                                        <Bus size={28} />
+                        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-all duration-300 relative overflow-hidden group h-[140px]">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
+                            <div className="relative z-10 flex flex-col h-full justify-between">
+                                <div className="flex justify-between items-center">
+                                    <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
+                                        <Bus size={20} />
                                     </div>
-                                    <span className="bg-emerald-50 text-emerald-700 text-xs font-bold px-2 py-1 rounded-full uppercase tracking-wider">Active</span>
+                                    <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Active</span>
                                 </div>
-                                <h3 className="text-slate-500 text-sm font-bold uppercase tracking-widest mb-1">Total Buses</h3>
-                                <p className="text-4xl font-extrabold text-slate-900">{stats.buses}</p>
-                                <p className="text-emerald-600 text-sm font-medium mt-2 flex items-center">
-                                    <span className="mr-1">●</span>
-                                    Fleet Operational
+                                <div>
+                                    <h3 className="text-slate-400 text-[11px] font-bold uppercase tracking-widest mb-0.5">Total Buses</h3>
+                                    <p className="text-3xl font-extrabold text-slate-900 leading-none">{stats.buses}</p>
+                                </div>
+                                <p className="text-emerald-600 text-[11px] font-medium flex items-center">
+                                    <span className="mr-1">●</span> Fleet Operational
                                 </p>
                             </div>
                         </div>
 
                         {/* Total Routes Card */}
-                        <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-125"></div>
-                            <div className="relative z-10">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="p-3 bg-blue-100 rounded-xl text-blue-600">
-                                        <Map size={28} />
+                        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-all duration-300 relative overflow-hidden group h-[140px]">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
+                            <div className="relative z-10 flex flex-col h-full justify-between">
+                                <div className="flex justify-between items-center">
+                                    <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+                                        <Map size={20} />
                                     </div>
-                                    <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-1 rounded-full uppercase tracking-wider">Network</span>
+                                    <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Network</span>
                                 </div>
-                                <h3 className="text-slate-500 text-sm font-bold uppercase tracking-widest mb-1">Total Routes</h3>
-                                <p className="text-4xl font-extrabold text-slate-900">{stats.routes}</p>
-                                <p className="text-blue-600 text-sm font-medium mt-2 flex items-center">
+                                <div>
+                                    <h3 className="text-slate-400 text-[11px] font-bold uppercase tracking-widest mb-0.5">Total Routes</h3>
+                                    <p className="text-3xl font-extrabold text-slate-900 leading-none">{stats.routes}</p>
+                                </div>
+                                <p className="text-blue-600 text-[11px] font-medium flex items-center">
                                     <span className="font-bold mr-1">{stats.totalDistance} km</span> coverage
                                 </p>
                             </div>
                         </div>
 
                         {/* Daily Passengers Card */}
-                        <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-50 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-125"></div>
-                            <div className="relative z-10">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="p-3 bg-purple-100 rounded-xl text-purple-600">
-                                        <Users size={28} />
+                        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-all duration-300 relative overflow-hidden group h-[140px]">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
+                            <div className="relative z-10 flex flex-col h-full justify-between">
+                                <div className="flex justify-between items-center">
+                                    <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
+                                        <Users size={20} />
                                     </div>
-                                    <span className="bg-purple-50 text-purple-700 text-xs font-bold px-2 py-1 rounded-full uppercase tracking-wider">Daily</span>
+                                    <span className="bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Total</span>
                                 </div>
-                                <h3 className="text-slate-500 text-sm font-bold uppercase tracking-widest mb-1">Passengers</h3>
-                                <p className="text-4xl font-extrabold text-slate-900">--</p>
-                                <p className="text-purple-600 text-sm font-medium mt-2">
-                                    Analytics coming soon
+                                <div>
+                                    <h3 className="text-slate-400 text-[11px] font-bold uppercase tracking-widest mb-0.5">Passengers</h3>
+                                    <p className="text-3xl font-extrabold text-slate-900 leading-none">{stats.totalPassengers}</p>
+                                </div>
+                                <p className="text-purple-600 text-[11px] font-medium flex items-center">
+                                    <span className="mr-1">●</span> Approved Requests
                                 </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                        {/* Course Breakdown Section */}
+                        <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 hover:shadow-lg transition-shadow">
+                            <h3 className="text-lg font-bold text-slate-900 mb-4 border-b border-slate-100 pb-3 flex items-center justify-between">
+                                <div className="flex items-center">
+                                    <span className="bg-emerald-100 text-emerald-600 p-2 rounded-lg mr-2.5">
+                                        <Users size={20} />
+                                    </span>
+                                    Course Wise
+                                </div>
+                            </h3>
+                            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                                {stats.courseBreakdown.length > 0 ? (
+                                    stats.courseBreakdown.map((item, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 gap-3">
+                                            <p className="font-bold text-slate-700 text-xs flex-1">{item.course}</p>
+                                            <div className="px-2.5 py-1 bg-white rounded-lg shadow-sm border border-slate-100 min-w-[50px] text-center">
+                                                <span className="text-xs font-black text-emerald-700">{item.count}</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-48 text-slate-400 bg-slate-50/50 rounded-xl border-dashed border-2 border-slate-200">
+                                        <p className="font-medium text-xs">No course data.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Route Breakdown Section */}
+                        <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 hover:shadow-lg transition-shadow">
+                            <h3 className="text-lg font-bold text-slate-900 mb-4 border-b border-slate-100 pb-3 flex items-center justify-between">
+                                <div className="flex items-center">
+                                    <span className="bg-blue-100 text-blue-600 p-2 rounded-lg mr-2.5">
+                                        <Map size={20} />
+                                    </span>
+                                    Route Analytics
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">Passengers</span>
+                            </h3>
+                            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                                {stats.routeBreakdown.length > 0 ? (
+                                    stats.routeBreakdown.map((route, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            onClick={() => setSelectedRouteId(selectedRouteId === route.route_id ? null : route.route_id)}
+                                            className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 border ${
+                                                selectedRouteId === route.route_id 
+                                                ? 'bg-blue-600 border-blue-600 shadow-md transform scale-[1.02]' 
+                                                : 'bg-slate-50 border-transparent hover:bg-blue-50 hover:border-blue-100'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2.5">
+                                                <div className={`w-7 h-7 flex items-center justify-center rounded-lg shadow-sm font-bold text-[10px] ${
+                                                    selectedRouteId === route.route_id ? 'bg-white text-blue-600' : 'bg-white text-blue-600'
+                                                }`}>
+                                                    #{idx + 1}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className={`font-bold text-xs ${selectedRouteId === route.route_id ? 'text-white' : 'text-slate-800'}`}>
+                                                        {route.route_name}
+                                                    </p>
+                                                    <p className={`text-[9px] font-medium ${selectedRouteId === route.route_id ? 'text-blue-100' : 'text-slate-500'}`}>
+                                                        ID: {route.route_id}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-right">
+                                                    <p className={`text-base font-black leading-none ${selectedRouteId === route.route_id ? 'text-white' : 'text-slate-900'}`}>
+                                                        {route.count}
+                                                    </p>
+                                                </div>
+                                                <div className={`h-6 w-0.5 rounded-full ${selectedRouteId === route.route_id ? 'bg-white/30' : 'bg-blue-200'}`}></div>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-48 text-slate-400 bg-slate-50/50 rounded-xl border-dashed border-2 border-slate-200">
+                                        <p className="font-medium text-xs">No route data.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Stage Breakdown Section */}
+                        <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-6 hover:shadow-lg transition-shadow">
+                            <h3 className="text-lg font-bold text-slate-900 mb-4 border-b border-slate-100 pb-3 flex items-center justify-between">
+                                <div className="flex items-center">
+                                    <span className="bg-purple-100 text-purple-600 p-2 rounded-lg mr-2.5">
+                                        <Users size={20} />
+                                    </span>
+                                    Stage Breakdown
+                                </div>
+                                {selectedRouteId ? (
+                                    <button 
+                                        onClick={() => setSelectedRouteId(null)}
+                                        className="text-[10px] font-bold text-purple-600 hover:text-purple-800 uppercase bg-purple-50 px-2 py-1 rounded-md transition-colors"
+                                    >
+                                        Clear Filter
+                                    </button>
+                                ) : (
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Density</span>
+                                )}
+                            </h3>
+                            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                                {stats.stageBreakdown.filter(s => !selectedRouteId || s.route_id === selectedRouteId).length > 0 ? (
+                                    stats.stageBreakdown
+                                        .filter(s => !selectedRouteId || s.route_id === selectedRouteId)
+                                        .map((stage, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl hover:bg-purple-50 transition-colors border border-transparent hover:border-purple-100 gap-3">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-bold text-slate-800 text-xs">{stage.stage_name}</p>
+                                                <p className="text-[9px] text-slate-500 font-medium">{stage.route_name}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="px-2 py-0.5 bg-white rounded-md shadow-sm border border-slate-100">
+                                                    <span className="text-xs font-black text-purple-700">{stage.count}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-48 text-slate-400 bg-slate-50/50 rounded-xl border-dashed border-2 border-slate-200">
+                                        <p className="font-medium text-xs">No stage data.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -138,20 +285,20 @@ const Dashboard = () => {
                                 Quick Actions
                             </h3>
                             <div className="grid grid-cols-2 gap-4">
-                                <button className="p-6 bg-slate-50 rounded-xl hover:bg-emerald-50 hover:text-emerald-700 transition-all text-left group border border-slate-100 hover:border-emerald-200 hover:shadow-md">
+                                <a href="/buses" className="p-6 bg-slate-50 rounded-xl hover:bg-emerald-50 hover:text-emerald-700 transition-all text-left group border border-slate-100 hover:border-emerald-200 hover:shadow-md block">
                                     <span className="mb-3 block group-hover:scale-110 transition-transform text-emerald-600">
                                         <Bus size={32} />
                                     </span>
                                     <span className="font-bold text-slate-700 group-hover:text-emerald-700 block text-lg">Add Bus</span>
                                     <span className="text-xs text-slate-500 group-hover:text-emerald-600">Register new vehicle</span>
-                                </button>
-                                <button className="p-6 bg-slate-50 rounded-xl hover:bg-blue-50 hover:text-blue-700 transition-all text-left group border border-slate-100 hover:border-blue-200 hover:shadow-md">
+                                </a>
+                                <a href="/routes" className="p-6 bg-slate-50 rounded-xl hover:bg-blue-50 hover:text-blue-700 transition-all text-left group border border-slate-100 hover:border-blue-200 hover:shadow-md block">
                                     <span className="mb-3 block group-hover:scale-110 transition-transform text-blue-600">
                                         <Map size={32} />
                                     </span>
                                     <span className="font-bold text-slate-700 group-hover:text-blue-700 block text-lg">New Route</span>
                                     <span className="text-xs text-slate-500 group-hover:text-blue-600">Create transport path</span>
-                                </button>
+                                </a>
                             </div>
                         </div>
                     </div>

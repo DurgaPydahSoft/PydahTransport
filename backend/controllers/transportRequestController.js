@@ -493,6 +493,53 @@ const createTransportRequest = async (req, res) => {
     }
 };
 
+// @desc    Get dashboard statistics
+// @route   GET /api/transport-requests/stats
+// @access  Private/Admin
+const getDashboardStats = async (req, res) => {
+    try {
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
+        // 1. Total Approved Passengers
+        const [totalRows] = await mysqlPool.query(
+            "SELECT COUNT(*) as total FROM transport_requests WHERE status = 'approved'"
+        );
+        const totalPassengers = totalRows[0].total;
+
+        // 2. Route-wise Passenger Counts
+        const [routeRows] = await mysqlPool.query(
+            "SELECT route_id, route_name, COUNT(*) as count FROM transport_requests WHERE status = 'approved' GROUP BY route_id, route_name ORDER BY count DESC"
+        );
+
+        // 3. Stage-wise Passenger Counts
+        const [stageRows] = await mysqlPool.query(
+            "SELECT route_id, route_name, stage_name, COUNT(*) as count FROM transport_requests WHERE status = 'approved' GROUP BY route_id, route_name, stage_name ORDER BY count DESC"
+        );
+
+        // 4. Course-wise Passenger Counts
+        const [courseRows] = await mysqlPool.query(
+            `SELECT s.course, COUNT(tr.id) as count 
+             FROM transport_requests tr 
+             JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)
+             WHERE tr.status = 'approved' 
+             GROUP BY s.course 
+             ORDER BY count DESC`
+        );
+
+        res.json({
+            totalPassengers,
+            routeBreakdown: routeRows,
+            stageBreakdown: stageRows,
+            courseBreakdown: courseRows
+        });
+    } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Get data for Concessions Management
 // @route   GET /api/transport-requests/concessions
 // @access  Private/Admin
@@ -790,6 +837,7 @@ module.exports = {
     rejectTransportRequest,
     createTransportRequest,
     getConcessions,
+    getDashboardStats,
     updateConcession,
     deleteConcession
 };

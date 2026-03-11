@@ -8,6 +8,7 @@ const {
     rejectTransportRequest,
     createTransportRequest,
     getConcessions,
+    getDashboardStats,
     updateConcession,
     deleteConcession
 } = require('../controllers/transportRequestController');
@@ -15,6 +16,7 @@ const {
 router.get('/', getTransportRequests);
 router.post('/', createTransportRequest);
 router.get('/concessions', getConcessions);
+router.get('/stats', getDashboardStats);
 router.patch('/:id/concession', updateConcession);
 router.get('/:id/semester-options', getSemesterOptions);
 router.patch('/:id/approve', approveTransportRequest);

@@ -97,26 +97,26 @@ const Layout = ({ children }) => {
                     ))}
                 </nav>
                 <div className="p-4 border-t border-gray-100">
-                    <div className="flex items-center gap-3 px-3 py-2 mb-2 bg-slate-50 rounded-lg border border-slate-100">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
+                    <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-xl border border-slate-100 transition-all duration-300">
+                        <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm border-2 border-white shadow-sm flex-shrink-0">
                             {(adminInfo.name || adminInfo.username || 'U').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">
+                            <p className="text-sm font-bold text-slate-900 truncate leading-tight">
                                 {adminInfo.name || adminInfo.username || 'User'}
                             </p>
-                            <p className="text-[10px] uppercase font-bold text-gray-500 truncate">
+                            <p className="text-[10px] uppercase font-black text-slate-400 truncate tracking-tighter">
                                 {adminInfo.role || 'Guest'}
                             </p>
                         </div>
+                        <button
+                            onClick={handleLogout}
+                            title="Logout"
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 group"
+                        >
+                            <LogOut size={18} className="group-hover:scale-110 transition-transform" />
+                        </button>
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm font-medium group"
-                    >
-                        <span className="mr-3 text-red-500 group-hover:text-red-700"><LogOut size={18} /></span>
-                        Logout
-                    </button>
                 </div>
             </aside>
 
