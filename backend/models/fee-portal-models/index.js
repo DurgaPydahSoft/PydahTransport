@@ -26,7 +26,10 @@ function getFeePortalModels() {
     if (!Transaction) {
         Transaction = conn.model('Transaction', TransactionModel.schema);
     }
-    return { FeeHead, StudentFee, Transaction };
+    const TransportConcessionModel = require('./TransportConcession');
+    const TransportConcession = conn.model('TransportConcession', TransportConcessionModel.schema);
+
+    return { FeeHead, StudentFee, Transaction, TransportConcession };
 }
 
 module.exports = {

@@ -168,6 +168,36 @@ const TransportRequests = () => {
         }
     };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this request? If approved, this will also remove associated fees and concessions.')) {
+            return;
+        }
+
+        setActionLoading(id);
+        setMessage({ text: '', type: '' });
+        try {
+            const response = await fetch(`${API_BASE}/transport-requests/${id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    admin_name: 'Admin', // In a real app, this would come from auth state
+                    admin_id: 1
+                })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                setMessage({ text: data.message || 'Request deleted successfully.', type: 'success' });
+                fetchRequests();
+            } else {
+                setMessage({ text: data.message || 'Failed to delete request', type: 'error' });
+            }
+        } catch (err) {
+            setMessage({ text: 'Something went wrong. Please try again.', type: 'error' });
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     const isPending = (req) => (req.status || '').toLowerCase() === 'pending';
 
     return (
@@ -332,6 +362,7 @@ const TransportRequests = () => {
                                     <th className="p-4">Admission No</th>
                                     <th className="p-4">Name</th>
                                     <th className="p-4">Course</th>
+                                    <th className="p-4 text-center">Year</th>
                                     <th className="p-4">Route</th>
                                     <th className="p-4">Stage</th>
                                     <th className="p-4">Fare</th>
@@ -346,6 +377,11 @@ const TransportRequests = () => {
                                         <td className="p-4 font-medium text-blue-600">{req.admission_number}</td>
                                         <td className="p-4 font-medium text-gray-900">{req.student_name}</td>
                                         <td className="p-4 text-xs font-semibold uppercase text-gray-500">{req.course || '—'}</td>
+                                        <td className="p-4 text-center">
+                                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                                                Y{req.year_of_study || '—'}
+                                            </span>
+                                        </td>
                                         <td className="p-4">{req.route_name}</td>
                                         <td className="p-4">{req.stage_name}</td>
                                         <td className="p-4 font-medium text-gray-900">₹{req.fare}</td>
@@ -361,28 +397,39 @@ const TransportRequests = () => {
                                             {new Date(req.request_date).toLocaleDateString()}
                                         </td>
                                         <td className="p-4">
-                                            {isPending(req) ? (
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleApprove(req.id)}
-                                                        disabled={actionLoading !== null}
-                                                        className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        Approve
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleReject(req.id)}
-                                                        disabled={actionLoading !== null}
-                                                        className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        {actionLoading === req.id ? '...' : 'Reject'}
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <span className="text-gray-400 text-xs">—</span>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {isPending(req) && (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleApprove(req.id)}
+                                                            disabled={actionLoading !== null}
+                                                            className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                        >
+                                                            Approve
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleReject(req.id)}
+                                                            disabled={actionLoading !== null}
+                                                            className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                        >
+                                                            {actionLoading === req.id ? '...' : 'Reject'}
+                                                        </button>
+                                                    </>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDelete(req.id)}
+                                                    disabled={actionLoading !== null}
+                                                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-50 transition-all hover:scale-110"
+                                                    title="Delete Request"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

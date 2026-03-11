@@ -268,12 +268,28 @@ const approveTransportRequest = async (req, res) => {
             });
         }
 
-        const { FeeHead, StudentFee } = feeModels;
+        const { FeeHead, StudentFee, TransportConcession } = feeModels;
         const transportFeeHead = await FeeHead.findOne({ code: TRANSPORT_FEE_HEAD_CODE });
         if (!transportFeeHead) {
             return res.status(500).json({
                 message: `Transport Fee Head (code: ${TRANSPORT_FEE_HEAD_CODE}) not found in Fee Management. Please seed Fee Heads.`,
             });
+        }
+
+        // Check for persistent concession
+        let finalAmount = amount;
+        if (TransportConcession) {
+            const persistentConcession = await TransportConcession.findOne({
+                studentId: String(admissionNumber),
+                feeHead: transportFeeHead._id
+            });
+            if (persistentConcession && persistentConcession.yearConcessions) {
+                const yearKey = String(studentYear);
+                const concessionForYear = persistentConcession.yearConcessions.get(yearKey);
+                if (concessionForYear !== undefined && concessionForYear !== null) {
+                    finalAmount = concessionForYear;
+                }
+            }
         }
 
         const existingFee = await StudentFee.findOne({
@@ -313,7 +329,7 @@ const approveTransportRequest = async (req, res) => {
             academicYear: resolvedAcademicYear,
             studentYear,
             semester: semester || undefined,
-            amount,
+            amount: finalAmount,
             remarks,
         });
 
@@ -440,10 +456,22 @@ const createTransportRequest = async (req, res) => {
     }
 
     try {
+        // Fetch student's current year if not provided
+        let yearOfStudy = 1;
+        if (admission_number) {
+            const [studentRows] = await mysqlPool.query(
+                'SELECT current_year FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
+                [admission_number, admission_number]
+            );
+            if (studentRows[0] && studentRows[0].current_year != null) {
+                yearOfStudy = Number(studentRows[0].current_year);
+            }
+        }
+
         const sql = `
             INSERT INTO transport_requests 
-            (admission_number, student_name, route_id, route_name, stage_name, fare, raised_by, raised_by_id, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            (admission_number, student_name, route_id, route_name, stage_name, fare, raised_by, raised_by_id, status, year_of_study)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
         `;
         const [result] = await mysqlPool.query(sql, [
             admission_number,
@@ -453,7 +481,8 @@ const createTransportRequest = async (req, res) => {
             stage_name,
             fare,
             raised_by,
-            raised_by_id
+            raised_by_id,
+            yearOfStudy
         ]);
 
         const [newRequest] = await mysqlPool.query('SELECT * FROM transport_requests WHERE id = ?', [result.insertId]);
@@ -468,6 +497,7 @@ const createTransportRequest = async (req, res) => {
 // @route   GET /api/transport-requests/concessions
 // @access  Private/Admin
 const getConcessions = async (req, res) => {
+    const { course, route_id, search } = req.query;
     try {
         if (!mysqlPool) {
             return res.status(500).json({ message: 'MySQL connection not established' });
@@ -478,36 +508,112 @@ const getConcessions = async (req, res) => {
             return res.status(503).json({ message: 'Fee Management database connection not available' });
         }
 
-        const { StudentFee, FeeHead } = feeModels;
+        const { StudentFee, FeeHead, TransportConcession } = feeModels;
         const transportFeeHead = await FeeHead.findOne({ code: TRANSPORT_FEE_HEAD_CODE });
 
         if (!transportFeeHead) {
             return res.status(500).json({ message: 'Transport Fee Head not found' });
         }
 
-        // 1. Fetch approved requests from MySQL
-        const [requests] = await mysqlPool.query("SELECT * FROM transport_requests WHERE status = 'approved' ORDER BY request_date DESC");
+        const { page = 1, limit = 10 } = req.query;
+        const offset = (Number(page) - 1) * Number(limit);
 
-        if (requests.length === 0) {
-            return res.json([]);
+        // 1. Fetch total count for pagination
+        let countSql = `
+            SELECT COUNT(*) as total
+            FROM transport_requests tr
+            LEFT JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)
+            WHERE tr.status = 'approved' 
+        `;
+        const countParams = [];
+
+        if (course) {
+            countSql += ` AND s.course = ?`;
+            countParams.push(course);
         }
 
-        // 2. Cross-reference with StudentFee in MongoDB to get the current allocated amount
+        if (route_id) {
+            countSql += ` AND tr.route_id = ?`;
+            countParams.push(route_id);
+        }
+
+        if (search) {
+            countSql += ` AND tr.student_name LIKE ?`;
+            countParams.push(`%${search}%`);
+        }
+
+        const [[{ total }]] = await mysqlPool.query(countSql, countParams);
+
+        // 1. Fetch approved requests from MySQL, including course duration and filters
+        let sql = `
+            SELECT tr.*, c.total_years as total_course_years 
+            FROM transport_requests tr
+            LEFT JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)
+            LEFT JOIN courses c ON s.course = c.name
+            WHERE tr.status = 'approved' 
+        `;
+        const params = [];
+
+        if (course) {
+            sql += ` AND s.course = ?`;
+            params.push(course);
+        }
+
+        if (route_id) {
+            sql += ` AND tr.route_id = ?`;
+            params.push(route_id);
+        }
+
+        if (search) {
+            sql += ` AND tr.student_name LIKE ?`;
+            params.push(`%${search}%`);
+        }
+
+        sql += ` ORDER BY tr.request_date DESC LIMIT ? OFFSET ?`;
+        params.push(Number(limit), offset);
+
+        const [requests] = await mysqlPool.query(sql, params);
+
+        if (requests.length === 0) {
+            return res.json({ 
+                data: [], 
+                pagination: { 
+                    total, 
+                    pages: Math.ceil(total / limit), 
+                    currentPage: Number(page),
+                    limit: Number(limit)
+                } 
+            });
+        }
+
+        // 2. Cross-reference with StudentFee and TransportConcession in MongoDB
         const admissionNumbers = requests.map(r => String(r.admission_number || r.admission_no));
 
-        const fees = await StudentFee.find({
-            studentId: { $in: admissionNumbers },
-            feeHead: transportFeeHead._id
-        }).lean();
+        const [fees, concessions] = await Promise.all([
+            StudentFee.find({
+                studentId: { $in: admissionNumbers },
+                feeHead: transportFeeHead._id
+            }).lean(),
+            TransportConcession ? TransportConcession.find({
+                studentId: { $in: admissionNumbers },
+                feeHead: transportFeeHead._id
+            }).lean() : Promise.resolve([])
+        ]);
 
         const feeMap = {};
         fees.forEach(f => {
             feeMap[f.studentId] = f;
         });
 
-        const result = requests.map(req => {
+        const concessionMap = {};
+        concessions.forEach(c => {
+            concessionMap[c.studentId] = c;
+        });
+
+        const data = requests.map(req => {
             const studentId = String(req.admission_number || req.admission_no);
             const fee = feeMap[studentId];
+            const persistent = concessionMap[studentId];
             return {
                 id: req.id,
                 admission_number: req.admission_number,
@@ -518,12 +624,22 @@ const getConcessions = async (req, res) => {
                 original_fare: req.fare,
                 current_fee: fee ? fee.amount : null,
                 fee_id: fee ? fee._id : null,
-                academic_year: fee ? fee.academicYear : null,
+                student_year: fee ? fee.studentYear : null,
+                yearConcessions: persistent ? persistent.yearConcessions : {},
+                total_course_years: req.total_course_years || 4,
                 updated_at: req.updated_at
             };
         });
 
-        res.json(result);
+        res.json({
+            data,
+            pagination: {
+                total,
+                pages: Math.ceil(total / limit),
+                currentPage: Number(page),
+                limit: Number(limit)
+            }
+        });
     } catch (error) {
         console.error('Error fetching concessions:', error);
         res.status(500).json({ message: error.message });
@@ -535,7 +651,7 @@ const getConcessions = async (req, res) => {
 // @access  Private/Admin
 const updateConcession = async (req, res) => {
     const { id } = req.params; // transport_request id
-    const { revised_amount, admin_name, admin_id } = req.body;
+    const { revised_amount, admin_name, admin_id, targetYear } = req.body;
 
     try {
         if (!mysqlPool) {
@@ -549,33 +665,43 @@ const updateConcession = async (req, res) => {
             return res.status(404).json({ message: 'Transport request not found' });
         }
 
-        if (revised_amount > request.fare) {
-            return res.status(400).json({ message: 'Concession amount cannot exceed the original fare.' });
-        }
-
         const feeModels = getFeePortalModels();
-        const { StudentFee, FeeHead } = feeModels;
+        const { StudentFee, FeeHead, TransportConcession } = feeModels;
         const transportFeeHead = await FeeHead.findOne({ code: TRANSPORT_FEE_HEAD_CODE });
 
         const studentId = String(request.admission_number || request.admission_no);
+
+        // 1. Update/Create persistent concession logic
+        if (TransportConcession && targetYear) {
+            let persistent = await TransportConcession.findOne({ studentId, feeHead: transportFeeHead._id });
+            if (!persistent) {
+                persistent = new TransportConcession({
+                    studentId,
+                    feeHead: transportFeeHead._id,
+                    yearConcessions: new Map(),
+                });
+            }
+            
+            persistent.yearConcessions.set(String(targetYear), Number(revised_amount));
+            persistent.updatedBy = admin_name;
+            await persistent.save();
+        }
+
+        // 2. Update current active StudentFee if years match
         const fee = await StudentFee.findOne({
             studentId,
             feeHead: transportFeeHead._id
         });
 
-        if (!fee) {
-            return res.status(404).json({ message: 'Fee record not found in Fee Management system.' });
+        if (fee && String(fee.studentYear) === String(targetYear)) {
+            fee.amount = Number(revised_amount);
+            await fee.save();
         }
-
-        const originalAmount = fee.amount;
-        fee.amount = revised_amount;
-        await fee.save();
 
         // Log to audit logs in MySQL
         const auditDetails = JSON.stringify({
             action: 'fee_concession',
-            original_fare: request.fare,
-            previous_fee: originalAmount,
+            target_year: targetYear,
             new_fee: revised_amount,
             admin_name
         });
@@ -585,10 +711,73 @@ const updateConcession = async (req, res) => {
             ['FEE_ADJUSTMENT', 'TRANSPORT_REQUEST', String(id), admin_id || null, auditDetails]
         );
 
-        res.json({ message: 'Concession applied successfully', new_amount: revised_amount });
+        res.json({ message: 'Concession updated successfully', targetYear, new_amount: revised_amount });
 
     } catch (error) {
         console.error('Error updating concession:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Delete concession and associated student fee
+// @route   DELETE /api/transport-requests/:id/concession
+// @access  Private/Admin
+const deleteConcession = async (req, res) => {
+    const { id } = req.params; // transport_request id
+    const { admin_name, admin_id } = req.body;
+
+    try {
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
+        const [rows] = await mysqlPool.query('SELECT * FROM transport_requests WHERE id = ?', [id]);
+        const request = rows[0];
+
+        if (!request) {
+            return res.status(404).json({ message: 'Transport request not found' });
+        }
+
+        const feeModels = getFeePortalModels();
+        const { StudentFee, FeeHead, TransportConcession } = feeModels;
+        const transportFeeHead = await FeeHead.findOne({ code: TRANSPORT_FEE_HEAD_CODE });
+
+        const studentId = String(request.admission_number || request.admission_no);
+
+        // 1. Delete persistent concession
+        if (TransportConcession) {
+            await TransportConcession.deleteOne({ studentId, feeHead: transportFeeHead._id });
+        }
+
+        // 2. Delete active StudentFee
+        const fee = await StudentFee.findOne({
+            studentId,
+            feeHead: transportFeeHead._id
+        });
+
+        if (fee) {
+            await fee.deleteOne();
+        }
+
+        // 3. Delete MySQL Transport Request
+        await mysqlPool.query('DELETE FROM transport_requests WHERE id = ?', [id]);
+
+        // Log to audit logs in MySQL
+        const auditDetails = JSON.stringify({
+            action: 'delete_concession',
+            student_id: studentId,
+            admin_name
+        });
+
+        await mysqlPool.query(
+            'INSERT INTO audit_logs (action_type, entity_type, entity_id, admin_id, details) VALUES (?, ?, ?, ?, ?)',
+            ['FEE_DELETION', 'TRANSPORT_REQUEST', String(id), admin_id || null, auditDetails]
+        );
+
+        res.json({ message: 'Concession, fee, and transport request deleted successfully' });
+
+    } catch (error) {
+        console.error('Error deleting concession:', error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -601,5 +790,6 @@ module.exports = {
     rejectTransportRequest,
     createTransportRequest,
     getConcessions,
-    updateConcession
+    updateConcession,
+    deleteConcession
 };
