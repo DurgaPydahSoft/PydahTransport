@@ -21,8 +21,16 @@ const Layout = ({ children }) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const handleLogout = () => {
+        const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
+        const isSSO = adminInfo.isSSO;
+
         localStorage.removeItem('adminInfo');
-        navigate('/login');
+
+        if (isSSO) {
+            window.location.href = import.meta.env.VITE_CRM_URL || 'http://localhost:5173';
+        } else {
+            navigate('/login');
+        }
     };
 
     const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');

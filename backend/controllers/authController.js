@@ -152,6 +152,7 @@ const ssoLogin = async (req, res) => {
                     name: employee.employee_name,
                     roles: userRole ? userRole.roles : ['user'],
                     permissions: userRole ? userRole.permissions : [],
+                    isSSO: true,
                     token: generateToken(employee._id)
                 };
             }
@@ -165,6 +166,7 @@ const ssoLogin = async (req, res) => {
                     _id: admin._id,
                     username: admin.username,
                     role: 'admin',
+                    isSSO: true,
                     token: generateToken(admin._id)
                 };
             }
