@@ -153,7 +153,7 @@ const Fleet = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase text-slate-500 font-bold tracking-wider">
-                                    <th className="px-4 py-2.5">Bus Details</th>
+                                    <th className="px-4 py-2.5 w-48">Bus Details</th>
                                     <th className="px-4 py-2.5">Route</th>
                                     <th className="px-4 py-2.5">Seats Filled</th>
                                     <th className="px-4 py-2.5">Capacity</th>

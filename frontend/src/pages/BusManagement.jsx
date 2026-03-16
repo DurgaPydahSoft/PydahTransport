@@ -307,7 +307,7 @@ const BusManagement = () => {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold tracking-wider">
-                                        <th className="p-4">Bus Details</th>
+                                        <th className="p-4 w-56">Bus Details</th>
                                         <th className="p-4">Capacity</th>
                                         <th className="p-4">Assigned Route</th>
                                     </tr>
@@ -321,7 +321,7 @@ const BusManagement = () => {
                                                     <p className="text-xs text-slate-500">{bus.type}</p>
                                                 </div>
                                             </td>
-                                            <td className="p-4 text-slate-600 font-medium">{bus.capacity} seats</td>
+                                            <td className="p-4 text-slate-600 font-medium">{bus.capacity}</td>
                                             <td className="p-4">
                                                 <select
                                                     value={bus.assignedRouteId || ''}
@@ -434,7 +434,7 @@ const BusManagement = () => {
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold tracking-wider">
-                                            <th className="px-4 py-3">Bus Details</th>
+                                            <th className="px-4 py-3 w-56">Bus Details</th>
                                             <th className="px-4 py-3">Capacity</th>
                                             <th className="px-4 py-3">Driver</th>
                                             <th className="px-4 py-3">Attendant</th>
@@ -459,7 +459,7 @@ const BusManagement = () => {
                                                 <td className="px-4 py-3 text-sm text-slate-600 font-medium">
                                                     <div className="flex items-center">
                                                         <Armchair size={14} className="text-slate-400 mr-2" />
-                                                        {bus.capacity} seats
+                                                        {bus.capacity}
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-slate-600">
