@@ -59,7 +59,7 @@ const Dashboard = () => {
     return (
         <Layout>
             <div className="mb-6">
-                <h2 className="text-2xl font-extrabold text-blue-900 break-words tracking-tight">Dashboard Overview</h2>
+                <h2 className="text-2xl font-extrabold  break-words tracking-tight">Dashboard Overview</h2>
                 <p className="text-slate-500 text-sm font-medium">Insights and analytics for transport management.</p>
             </div>
 
