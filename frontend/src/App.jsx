@@ -11,6 +11,7 @@ import TransportDues from './pages/TransportDues';
 import UserManagement from './pages/UserManagement';
 import AdminRaiseRequest from './pages/AdminRaiseRequest';
 import Concessions from './pages/Concessions';
+import Inventory from './pages/Inventory';
 import './App.css';
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
           <Route path="/users" element={<UserManagement />} />
           <Route path="/raise-request" element={<AdminRaiseRequest />} />
           <Route path="/concessions" element={<Concessions />} />
+          <Route path="/inventory" element={<Inventory />} />
         </Routes>
       </div>
     </Router>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
-import { Download, CreditCard } from 'lucide-react';
+import { Download, CreditCard, History, Users as UsersIcon, Package, Calendar, Tag } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import PassengerReport from '../components/PassengerReport';
@@ -19,6 +19,9 @@ const BusDetails = () => {
     const [assignLoading, setAssignLoading] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [fetchingPass, setFetchingPass] = useState(false);
+    const [inventoryHistory, setInventoryHistory] = useState([]);
+    const [activeTab, setActiveTab] = useState('passengers');
+    const [inventoryLoading, setInventoryLoading] = useState(false);
 
     const componentRef = useRef();
     const handlePrint = useReactToPrint({
@@ -52,6 +55,28 @@ const BusDetails = () => {
             setFetchingPass(false);
         }
     };
+
+    useEffect(() => {
+        const fetchInventory = async () => {
+            if (!data?.bus?.busNumber) return;
+            setInventoryLoading(true);
+            try {
+                const response = await fetch(`${API}/inventory/history/${data.bus.busNumber}`);
+                if (response.ok) {
+                    const json = await response.json();
+                    setInventoryHistory(json);
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setInventoryLoading(false);
+            }
+        };
+
+        if (activeTab === 'inventory') {
+            fetchInventory();
+        }
+    }, [data?.bus?.busNumber, activeTab]);
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -244,73 +269,145 @@ const BusDetails = () => {
             <PassengerReport ref={componentRef} passengers={passengers || []} />
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
-                    <h2 className="text-lg font-bold text-gray-800">Passenger list</h2>
-                    {route && (
-                        <button
-                            type="button"
-                            onClick={openAssignModal}
-                            className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
-                        >
-                            Assign passengers to this bus
-                        </button>
-                    )}
+                <div className="border-b border-gray-100 flex">
+                    <button
+                        onClick={() => setActiveTab('passengers')}
+                        className={`px-6 py-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'passengers' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    >
+                        <UsersIcon size={18} /> Passenger list
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('inventory')}
+                        className={`px-6 py-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'inventory' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                    >
+                        <History size={18} /> Inventory History
+                    </button>
                 </div>
-                {passengers.length === 0 ? (
-                    <div className="p-12 text-center text-gray-500">
-                        <p>No passengers assigned to this bus yet.</p>
-                        {route && (
-                            <button
-                                type="button"
-                                onClick={openAssignModal}
-                                className="mt-2 text-blue-600 hover:underline font-medium"
-                            >
-                                Assign from approved requests for this route
-                            </button>
+
+                {activeTab === 'passengers' ? (
+                    <>
+                        <div className="p-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
+                            <h2 className="text-lg font-bold text-gray-800">Passenger list</h2>
+                            {route && (
+                                <button
+                                    type="button"
+                                    onClick={openAssignModal}
+                                    className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                                >
+                                    Assign passengers to this bus
+                                </button>
+                            )}
+                        </div>
+                        {passengers.length === 0 ? (
+                            <div className="p-12 text-center text-gray-500">
+                                <p>No passengers assigned to this bus yet.</p>
+                                {route && (
+                                    <button
+                                        type="button"
+                                        onClick={openAssignModal}
+                                        className="mt-2 text-blue-600 hover:underline font-medium"
+                                    >
+                                        Assign from approved requests for this route
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+                                            <th className="p-4">#</th>
+                                            <th className="p-4">Type</th>
+                                            <th className="p-4">ID Number</th>
+                                            <th className="p-4">Name</th>
+                                            <th className="p-4">Stage</th>
+                                            <th className="p-4">Fare</th>
+                                            <th className="p-4 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {passengers.map((p, i) => (
+                                            <tr key={p.id} className="hover:bg-gray-50">
+                                                <td className="p-4 text-gray-500">{i + 1}</td>
+                                                <td className="p-4">
+                                                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${p.user_type === 'employee' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                        {p.user_type || 'student'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 font-medium text-gray-600">{p.admission_number || p.emp_no}</td>
+                                                <td className="p-4">{p.student_name || p.employee_name}</td>
+                                                <td className="p-4">{p.stage_name}</td>
+                                                <td className="p-4 text-gray-500">{p.user_type === 'employee' ? 'Free (₹0)' : `₹${p.fare}`}</td>
+                                                <td className="p-4 text-right">
+                                                    <button
+                                                        type="button"
+                                                        disabled={fetchingPass}
+                                                        onClick={() => handlePrintPassClick(p)}
+                                                        className={`p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all hover:scale-110 ${fetchingPass ? 'animate-pulse opacity-50' : ''}`}
+                                                        title="Print Bus Pass"
+                                                    >
+                                                        <CreditCard size={18} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
-                    </div>
+                    </>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
-                                    <th className="p-4">#</th>
-                                    <th className="p-4">Type</th>
-                                    <th className="p-4">ID Number</th>
-                                    <th className="p-4">Name</th>
-                                    <th className="p-4">Stage</th>
-                                    <th className="p-4">Fare</th>
-                                    <th className="p-4 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {passengers.map((p, i) => (
-                                    <tr key={p.id} className="hover:bg-gray-50">
-                                        <td className="p-4 text-gray-500">{i + 1}</td>
-                                        <td className="p-4">
-                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${p.user_type === 'employee' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                {p.user_type || 'student'}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 font-medium text-gray-600">{p.admission_number || p.emp_no}</td>
-                                        <td className="p-4">{p.student_name || p.employee_name}</td>
-                                        <td className="p-4">{p.stage_name}</td>
-                                        <td className="p-4 text-gray-500">{p.user_type === 'employee' ? 'Free (₹0)' : `₹${p.fare}`}</td>
-                                        <td className="p-4 text-right">
-                                            <button
-                                                type="button"
-                                                disabled={fetchingPass}
-                                                onClick={() => handlePrintPassClick(p)}
-                                                className={`p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all hover:scale-110 ${fetchingPass ? 'animate-pulse opacity-50' : ''}`}
-                                                title="Print Bus Pass"
-                                            >
-                                                <CreditCard size={18} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <div className="p-6">
+                        {inventoryLoading ? (
+                            <div className="py-20 flex justify-center"><Loader text="Loading history..." /></div>
+                        ) : inventoryHistory.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-gray-50 border-b border-gray-100 text-[11px] uppercase text-gray-400 font-black tracking-widest">
+                                            <th className="px-6 py-4">Date</th>
+                                            <th className="px-6 py-4">Item</th>
+                                            <th className="px-6 py-4">Quantity</th>
+                                            <th className="px-6 py-4">Remarks</th>
+                                            <th className="px-6 py-4">Allocated By</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {inventoryHistory.map(record => (
+                                            <tr key={record._id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-bold">
+                                                    <div className="flex items-center gap-2">
+                                                        <Calendar size={14} className="text-gray-400" />
+                                                        {new Date(record.allocatedDate).toLocaleDateString()}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <Package size={14} className="text-blue-400" />
+                                                        <span className="font-bold text-gray-800 text-sm">{record.itemId?.itemName || 'Deleted Item'}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="font-black text-blue-700">{record.quantity} {record.itemId?.unit || ''}</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-xs text-gray-500 italic">
+                                                    {record.remarks || '—'}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-gray-500 font-medium">
+                                                    {record.adminName}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div className="py-20 text-center text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100">
+                                <History className="mx-auto mb-3 opacity-20" size={48} />
+                                <p className="font-medium text-sm">No items have been allocated to this bus yet.</p>
+                                <Link to="/inventory" className="mt-4 inline-block text-blue-600 font-bold hover:underline">Go to Inventory Management</Link>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

@@ -12,7 +12,8 @@ import {
     Menu,
     X,
     PlusCircle,
-    Percent
+    Percent,
+    Package
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -49,6 +50,7 @@ const Layout = ({ children }) => {
         { path: '/buses', label: 'Bus Management', permission: 'bus_management', icon: <Bus size={20} /> },
         { path: '/fleet', label: 'Fleet & Passengers', permission: 'fleet_passengers', icon: <Users size={20} /> },
         { path: '/routes', label: 'Route Management', permission: 'route_management', icon: <Map size={20} /> },
+        { path: '/inventory', label: 'Inventory', icon: <Package size={20} /> },
         { path: '/transport-requests', label: 'Requests', permission: 'transport_requests', icon: <ClipboardList size={20} /> },
         { path: '/raise-request', label: 'Raise Request', permission: 'raise_request', icon: <PlusCircle size={20} /> },
         { path: '/concessions', label: 'Concessions', permission: 'concessions', icon: <Percent size={20} /> },
