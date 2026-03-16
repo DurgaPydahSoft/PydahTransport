@@ -188,117 +188,116 @@ const RouteManagement = () => {
                     </button>
                 </div>
             ) : (
-                <div className="flex flex-col space-y-3">
-                    {routes.map((route) => {
-                        const isExpanded = expandedRouteId === route._id;
-                        return (
-                            <div
-                                key={route._id}
-                                className={`bg-white rounded-xl shadow-sm border transition-all duration-300 overflow-hidden ${isExpanded ? 'border-blue-200 ring-1 ring-blue-100' : 'border-slate-200 hover:border-blue-200 hover:shadow-md'}`}
-                            >
-                                {/* Header / Summary Row */}
-                                <div
-                                    onClick={() => toggleRoute(route._id)}
-                                    className="p-3 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer group"
-                                >
-                                    {/* Left: Identity */}
-                                    <div className="flex items-center gap-3 w-full md:w-1/4">
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{route.routeName}</h3>
-                                                <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded border border-slate-200 font-mono">
-                                                    {route.routeId}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-0.5">
-                                                <Clock size={10} className="text-slate-400" />
-                                                {route.estimatedTime}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Middle: Route Path */}
-                                    <div className="flex items-center justify-center gap-3 w-full md:w-1/3 px-2">
-                                        <span className="text-[10px] font-semibold text-slate-700 truncate max-w-[100px] text-right" title={route.startPoint}>{route.startPoint}</span>
-                                        <div className="flex-1 flex flex-col items-center">
-                                            <div className="w-full h-px bg-slate-200 relative">
-                                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-1">
-                                                    <ArrowRight size={12} className="text-slate-300" />
-                                                </div>
-                                            </div>
-                                            <span className="text-[9px] text-slate-400 font-medium mt-1">{route.totalDistance} km</span>
-                                        </div>
-                                        <span className="text-[10px] font-semibold text-slate-700 truncate max-w-[100px]" title={route.endPoint}>{route.endPoint}</span>
-                                    </div>
-
-                                    {/* Right: Stats & Actions */}
-                                    <div className="flex items-center justify-end gap-3 w-full md:w-1/3">
-                                        <div className="hidden sm:flex items-center gap-3 mr-2">
-                                            <div className="text-right">
-                                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stages</span>
-                                                <span className="block text-xs font-semibold text-slate-700">{route.stages.length}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-1 pl-3 border-l border-slate-100">
-                                            <button
-                                                onClick={(e) => handleEdit(route, e)}
-                                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                title="Edit Route"
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-black tracking-widest">
+                                    <th className="px-6 py-4">Route Details</th>
+                                    <th className="px-6 py-4">Path (Start → End)</th>
+                                    <th className="px-6 py-4">Distance & Time</th>
+                                    <th className="px-6 py-4">Stages</th>
+                                    <th className="px-6 py-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {routes.map((route) => {
+                                    const isExpanded = expandedRouteId === route._id;
+                                    return (
+                                        <React.Fragment key={route._id}>
+                                            <tr 
+                                                onClick={() => toggleRoute(route._id)}
+                                                className={`cursor-pointer transition-colors group ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}
                                             >
-                                                <Edit size={14} />
-                                            </button>
-                                            <button
-                                                onClick={(e) => handleDelete(route._id, e)}
-                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                title="Delete Route"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                            <div className={`p-1 ml-1 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`}>
-                                                <ChevronDown size={16} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Expanded Content: Stages */}
-                                <div
-                                    className={`bg-slate-50 border-t border-slate-100 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
-                                >
-                                    <div className="p-4">
-                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center">
-                                            <Milestone size={12} className="mr-1.5 text-blue-500" />
-                                            Route Stages & Fares
-                                        </h4>
-
-                                        {route.stages.length === 0 ? (
-                                            <p className="text-xs text-slate-400 italic">No stages defined for this route.</p>
-                                        ) : (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                                {route.stages.map((stage, index) => (
-                                                    <div key={index} className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-sm flex items-center justify-between">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-[10px] ring-2 ring-white">
-                                                                {index + 1}
-                                                            </span>
-                                                            <div>
-                                                                <p className="font-semibold text-slate-700 text-xs">{stage.stageName}</p>
-                                                                <p className="text-[10px] text-slate-400">{stage.distanceFromStart} km from start</p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="font-mono font-medium text-slate-700 text-xs bg-green-50 px-1.5 py-0.5 rounded text-green-700 border border-green-100">
-                                                            ₹{stage.fare}
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-slate-800 text-sm">{route.routeName}</span>
+                                                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-xs font-bold rounded border border-slate-200 font-mono">
+                                                            {route.routeId}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center text-sm text-slate-600 font-medium">
+                                                        <span className="truncate max-w-[120px]" title={route.startPoint}>{route.startPoint}</span>
+                                                        <ArrowRight size={14} className="mx-2 text-slate-300" />
+                                                        <span className="truncate max-w-[120px]" title={route.endPoint}>{route.endPoint}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-sm font-bold text-slate-700">{route.totalDistance} <span className="text-xs text-slate-400 font-medium uppercase ml-0.5">KM</span></span>
+                                                        <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
+                                                            <Clock size={12} />
+                                                            {route.estimatedTime}
                                                         </div>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2 py-1 rounded-md text-xs font-bold border ${route.stages.length > 0 ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                                                        {route.stages.length}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <button
+                                                            onClick={(e) => handleEdit(route, e)}
+                                                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                            title="Edit"
+                                                        >
+                                                            <Edit size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => handleDelete(route._id, e)}
+                                                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                            title="Delete"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                        <div className={`p-1.5 text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : ''}`}>
+                                                            <ChevronDown size={18} />
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {isExpanded && (
+                                                <tr>
+                                                    <td colSpan="5" className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                        <div className="flex items-center gap-2 mb-4">
+                                                            <Milestone size={16} className="text-blue-600" />
+                                                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Stages & Fare Distribution</h4>
+                                                        </div>
+                                                        {route.stages.length === 0 ? (
+                                                            <p className="text-xs text-slate-400 italic py-2">No stages defined for this route network.</p>
+                                                        ) : (
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                                                {route.stages.map((stage, index) => (
+                                                                    <div key={index} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group/stage hover:border-blue-200 transition-colors">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-xs group-hover/stage:bg-blue-600 group-hover/stage:text-white transition-colors">
+                                                                                {index + 1}
+                                                                            </span>
+                                                                            <div>
+                                                                                <p className="font-bold text-slate-800 text-sm">{stage.stageName}</p>
+                                                                                <p className="text-xs text-slate-400 font-medium">{stage.distanceFromStart} km</p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="text-sm font-black text-slate-900 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 text-emerald-700">
+                                                                            ₹{stage.fare}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
 
