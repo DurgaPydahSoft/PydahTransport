@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useReactToPrint } from 'react-to-print';
+import { CreditCard, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
+import BusPassCard from '../components/BusPassCard';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -22,6 +25,13 @@ const TransportRequests = () => {
     const [actionLoading, setActionLoading] = useState(null);
     const [message, setMessage] = useState({ text: '', type: '' });
     const [approveModal, setApproveModal] = useState({ open: false, requestId: null, data: null, loading: true, error: null });
+    const [selectedPassPassenger, setSelectedPassPassenger] = useState(null);
+
+    const passComponentRef = useRef();
+    const handlePrintPass = useReactToPrint({
+        contentRef: passComponentRef,
+        documentTitle: selectedPassPassenger ? `Bus-Pass-${selectedPassPassenger.admission_number || selectedPassPassenger.emp_no}` : 'Bus-Pass'
+    });
 
     const fetchRequests = async () => {
         setLoading(true);
@@ -436,6 +446,19 @@ const TransportRequests = () => {
                                                         </button>
                                                     </>
                                                 )}
+                                                {req.status === 'approved' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedPassPassenger(req);
+                                                            setTimeout(() => handlePrintPass(), 100);
+                                                        }}
+                                                        className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all hover:scale-110"
+                                                        title="Print Bus Pass"
+                                                    >
+                                                        <CreditCard size={18} />
+                                                    </button>
+                                                )}
                                                 <button
                                                     type="button"
                                                     onClick={() => handleDelete(req.id)}
@@ -443,9 +466,7 @@ const TransportRequests = () => {
                                                     className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-50 transition-all hover:scale-110"
                                                     title="Delete Request"
                                                 >
-                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                    </svg>
+                                                    <Trash2 size={18} />
                                                 </button>
                                             </div>
                                         </td>
@@ -454,6 +475,8 @@ const TransportRequests = () => {
                             </tbody>
                         </table>
                     </div>
+                    
+                    <BusPassCard ref={passComponentRef} passenger={selectedPassPassenger} />
                 </div>
             )
             }

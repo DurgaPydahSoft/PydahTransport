@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
-import { Download } from 'lucide-react';
+import { Download, CreditCard } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import PassengerReport from '../components/PassengerReport';
+import BusPassCard from '../components/BusPassCard';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -21,6 +22,13 @@ const BusDetails = () => {
     const handlePrint = useReactToPrint({
         contentRef: componentRef,
         documentTitle: `Transport-Passenger-Report-${id}`
+    });
+
+    const [selectedPassPassenger, setSelectedPassPassenger] = useState(null);
+    const passCardRef = useRef();
+    const handlePrintPass = useReactToPrint({
+        contentRef: passCardRef,
+        documentTitle: selectedPassPassenger ? `Bus-Pass-${selectedPassPassenger.admission_number || selectedPassPassenger.emp_no}` : 'Bus-Pass'
     });
 
     useEffect(() => {
@@ -248,6 +256,7 @@ const BusDetails = () => {
                                     <th className="p-4">Name</th>
                                     <th className="p-4">Stage</th>
                                     <th className="p-4">Fare</th>
+                                    <th className="p-4 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -263,6 +272,19 @@ const BusDetails = () => {
                                         <td className="p-4">{p.student_name || p.employee_name}</td>
                                         <td className="p-4">{p.stage_name}</td>
                                         <td className="p-4 text-gray-500">{p.user_type === 'employee' ? 'Free (₹0)' : `₹${p.fare}`}</td>
+                                        <td className="p-4 text-right">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedPassPassenger(p);
+                                                    setTimeout(() => handlePrintPass(), 100);
+                                                }}
+                                                className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all hover:scale-110"
+                                                title="Print Bus Pass"
+                                            >
+                                                <CreditCard size={18} />
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -270,6 +292,8 @@ const BusDetails = () => {
                     </div>
                 )}
             </div>
+            
+            <BusPassCard ref={passCardRef} passenger={selectedPassPassenger} />
 
             <Modal isOpen={assignModalOpen} onClose={() => setAssignModalOpen(false)} title="Assign passengers to this bus">
                 {!data?.bus?.assignedRouteId ? (

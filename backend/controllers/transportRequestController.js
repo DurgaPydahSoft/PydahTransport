@@ -172,7 +172,9 @@ const getTransportRequests = async (req, res) => {
         let sql = `
             SELECT tr.*, 
                    COALESCE(s1.course, s2.course) as course,
-                   COALESCE(s1.branch, s2.branch) as branch
+                   COALESCE(s1.branch, s2.branch) as branch,
+                   COALESCE(s1.student_photo, s2.student_photo) as student_photo,
+                   COALESCE(s1.qr_token, s2.qr_token) as qr_token
             FROM transport_requests tr 
             LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
             LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
