@@ -83,7 +83,7 @@ const Layout = ({ children }) => {
                             className="h-10 w-10 object-contain flex-shrink-0"
                         />
                         {!isCollapsed && (
-                            <h1 className="text-xl font-bold  whitespace-nowrap animate-in fade-in slide-in-from-left-2">
+                            <h1 className="text-xl font-extrabold whitespace-nowrap animate-in fade-in slide-in-from-left-2">
                                 TRANSPORT
                             </h1>
                         )}
