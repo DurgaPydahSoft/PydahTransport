@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useReactToPrint } from 'react-to-print';
+import { Download } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
+import PassengerReport from '../components/PassengerReport';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -13,6 +16,12 @@ const BusDetails = () => {
     const [unassignedPassengers, setUnassignedPassengers] = useState([]);
     const [assignLoading, setAssignLoading] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());
+
+    const componentRef = useRef();
+    const handlePrint = useReactToPrint({
+        contentRef: componentRef,
+        documentTitle: `Transport-Passenger-Report-${id}`
+    });
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -116,7 +125,17 @@ const BusDetails = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <h1 className="text-2xl font-bold text-gray-900 mb-1">{bus.busNumber}</h1>
+                    <div className="flex justify-between items-start mb-1">
+                        <h1 className="text-2xl font-bold text-gray-900">{bus.busNumber}</h1>
+                        <button
+                            type="button"
+                            onClick={handlePrint}
+                            className="flex items-center text-sm bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-100 transition-colors border border-blue-200"
+                        >
+                            <Download size={16} className="mr-1.5" />
+                            Report
+                        </button>
+                    </div>
                     <p className="text-gray-500 mb-4">{bus.type} • {bus.status}</p>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
@@ -189,6 +208,8 @@ const BusDetails = () => {
                     </div>
                 </div>
             </div>
+
+            <PassengerReport ref={componentRef} passengers={passengers || []} />
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="p-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">

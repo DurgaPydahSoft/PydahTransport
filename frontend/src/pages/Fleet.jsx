@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useReactToPrint } from 'react-to-print';
+import PassengerReport from '../components/PassengerReport';
 import Layout from '../components/Layout';
 import Loader from '../components/Loader';
 import {
@@ -9,7 +11,9 @@ import {
     Activity,
     AlertCircle,
     CheckCircle2,
-    ArrowRight
+    ArrowRight,
+    Download,
+    Loader2
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || '';
@@ -19,6 +23,44 @@ const Fleet = () => {
     const [loading, setLoading] = useState(true);
     const [allocatingId, setAllocatingId] = useState(null);
     const [message, setMessage] = useState({ text: '', type: '' });
+    
+    // Print logic
+    const componentRef = useRef();
+    const [printPassengers, setPrintPassengers] = useState([]);
+    const [isPrinting, setIsPrinting] = useState(false);
+
+    const handlePrint = useReactToPrint({
+        contentRef: componentRef,
+        documentTitle: 'Transport-Passenger-Report',
+        onAfterPrint: () => setIsPrinting(false),
+        onPrintError: () => setIsPrinting(false)
+    });
+
+    const handleDownloadReport = async () => {
+        setIsPrinting(true);
+        try {
+            const response = await fetch(`${API}/transport-requests?status=approved`);
+            if (response.ok) {
+                const data = await response.json();
+                setPrintPassengers(data);
+                // Give React a tick to render the hidden component with data before triggering print
+                setTimeout(() => {
+                    try {
+                        handlePrint();
+                    } catch (e) {
+                        setIsPrinting(false);
+                        setMessage({ text: 'Error triggering print dialog.', type: 'error' });
+                    }
+                }, 300);
+            } else {
+                setMessage({ text: 'Failed to fetch printing data.', type: 'error' });
+                setIsPrinting(false);
+            }
+        } catch (e) {
+            setMessage({ text: 'Error generating report.', type: 'error' });
+            setIsPrinting(false);
+        }
+    };
 
     const fetchOverview = async () => {
         setLoading(true);
@@ -62,10 +104,23 @@ const Fleet = () => {
 
     return (
         <Layout>
-            <div className="mb-8">
-                <h2 className="text-3xl font-extrabold text-blue-900 break-words tracking-tight">Fleet & Passengers</h2>
-                <p className="text-slate-700 mt-2 font-medium">Manage transport requests and bus capacity.</p>
+            <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-3xl font-extrabold text-blue-900 break-words tracking-tight">Fleet & Passengers</h2>
+                    <p className="text-slate-700 mt-2 font-medium">Manage transport requests and bus capacity.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={handleDownloadReport}
+                    disabled={isPrinting}
+                    className="flex items-center bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm hover:bg-blue-700 disabled:opacity-50 transition-all flex-none whitespace-nowrap h-fit"
+                >
+                    {isPrinting ? <Loader2 size={18} className="mr-2 text-white animate-spin" /> : <Download size={18} className="mr-2" />}
+                    {isPrinting ? 'Preparing Report...' : 'Download Route-Wise Report'}
+                </button>
             </div>
+            
+            <PassengerReport ref={componentRef} passengers={printPassengers} />
 
             {message.text && (
                 <div className={`mb-4 p-3 rounded-lg border flex items-center text-sm ${message.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>

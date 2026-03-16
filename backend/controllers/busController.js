@@ -19,7 +19,14 @@ const getBusDetails = async (req, res) => {
         let mysqlPassengers = [];
         if (mysqlPool) {
             const [rows] = await mysqlPool.query(
-                "SELECT id, admission_number, student_name, route_name, stage_name, fare, request_date FROM transport_requests WHERE bus_id = ? AND status = 'approved' ORDER BY stage_name, student_name",
+                `SELECT tr.id, tr.admission_number, tr.student_name, tr.route_name, tr.stage_name, tr.fare, tr.request_date, tr.bus_id,
+                        COALESCE(s1.course, s2.course) as course,
+                        COALESCE(s1.branch, s2.branch) as branch
+                 FROM transport_requests tr
+                 LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
+                 LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
+                 WHERE tr.bus_id = ? AND tr.status = 'approved' 
+                 ORDER BY tr.stage_name, tr.student_name`,
                 [bus.busNumber]
             );
             mysqlPassengers = rows.map(r => ({ ...r, user_type: 'student' }));
@@ -34,7 +41,9 @@ const getBusDetails = async (req, res) => {
             stage_name: r.stage_name,
             fare: r.fare,
             request_date: r.request_date || r.created_at,
-            user_type: 'employee'
+            user_type: 'employee',
+            bus_id: r.bus_id,
+            course: 'Employee'
         }));
 
         const passengers = [...mysqlPassengers, ...mongoPassengers];

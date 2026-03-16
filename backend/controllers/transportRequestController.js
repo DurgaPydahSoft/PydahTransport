@@ -169,7 +169,14 @@ const getTransportRequests = async (req, res) => {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
         const { route_id, status, bus_id, course, search } = req.query;
-        let sql = 'SELECT tr.*, s.course FROM transport_requests tr LEFT JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)';
+        let sql = `
+            SELECT tr.*, 
+                   COALESCE(s1.course, s2.course) as course,
+                   COALESCE(s1.branch, s2.branch) as branch
+            FROM transport_requests tr 
+            LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
+            LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
+        `;
         const params = [];
 
         sql += ' WHERE 1=1';
