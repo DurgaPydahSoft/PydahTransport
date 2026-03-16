@@ -158,14 +158,13 @@ const RouteManagement = () => {
         <Layout>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <div>
-                    <h2 className="text-3xl font-extrabold text-blue-900 tracking-tight">Route Network</h2>
+                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Route Network ({routes.length})</h2>
                     <p className="text-slate-600 mt-1">Design routes, manage stages, and set fares.</p>
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
                     className="bg-blue-900 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md transition-all hover:shadow-lg active:scale-95 flex items-center group"
                 >
-                    <Plus className="mr-2 group-hover:rotate-90 transition-transform" size={20} />
                     Create Route
                 </button>
             </div>
@@ -204,9 +203,6 @@ const RouteManagement = () => {
                                 >
                                     {/* Left: Identity */}
                                     <div className="flex items-center gap-3 w-full md:w-1/4">
-                                        <div className={`p-1.5 rounded-lg transition-colors ${isExpanded ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'}`}>
-                                            <Navigation size={16} />
-                                        </div>
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{route.routeName}</h3>

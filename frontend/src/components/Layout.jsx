@@ -105,10 +105,6 @@ const Layout = ({ children }) => {
                                 {item.icon}
                             </span>
                             {!isCollapsed && <span className="truncate text-sm animate-in fade-in slide-in-from-left-2">{item.label}</span>}
-
-                            {(location.pathname === item.path && !isCollapsed) && (
-                                <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-400 rounded-l-md"></span>
-                            )}
                         </Link>
                     ))}
                 </nav>

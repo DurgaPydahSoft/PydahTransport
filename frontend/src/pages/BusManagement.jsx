@@ -25,6 +25,7 @@ const VIEW_MODES = { table: 'table', card: 'card' };
 const BusManagement = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState(TABS.buses);
+    const [staffSubTab, setStaffSubTab] = useState('drivers');
     const [viewMode, setViewMode] = useState(VIEW_MODES.table);
     const [buses, setBuses] = useState([]);
     const [routes, setRoutes] = useState([]);
@@ -231,7 +232,7 @@ const BusManagement = () => {
         <Layout>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <div>
-                    <h2 className="text-3xl font-extrabold text-blue-900 tracking-tight">Bus Management</h2>
+                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Bus Management</h2>
                     <p className="text-slate-600 mt-1">Manage buses and assign them to routes.</p>
                 </div>
                 {activeTab === TABS.buses && (
@@ -270,7 +271,7 @@ const BusManagement = () => {
                     className={`px-4 py-2.5 rounded-t-xl text-sm font-medium transition-colors flex items-center ${activeTab === TABS.buses ? 'bg-white border border-b-0 border-gray-200 text-blue-700 shadow-sm -mb-px' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}
                 >
                     <Bus size={18} className="mr-2" />
-                    Buses
+                    Buses ({buses.length})
                 </button>
                 <button
                     type="button"
@@ -348,48 +349,56 @@ const BusManagement = () => {
 
             {activeTab === TABS.staff && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
-                    <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                        <h3 className="font-semibold text-slate-800">Drivers & Cleaners List</h3>
-                        <p className="text-sm text-slate-500 mt-0.5">List of all drivers and cleaners fetched from HRMS database.</p>
+                    <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                            <h3 className="font-semibold text-slate-800">Drivers & Cleaners List</h3>
+                            <p className="text-sm text-slate-500 mt-0.5">List of all staff members from HRMS.</p>
+                        </div>
+                        <div className="bg-white p-1 rounded-lg border border-slate-200 flex items-center shadow-sm">
+                            <button
+                                onClick={() => setStaffSubTab('drivers')}
+                                className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${staffSubTab === 'drivers' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                            >
+                                DRIVERS ({drivers.length})
+                            </button>
+                            <button
+                                onClick={() => setStaffSubTab('cleaners')}
+                                className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${staffSubTab === 'cleaners' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                            >
+                                CLEANERS ({cleaners.length})
+                            </button>
+                        </div>
                     </div>
                     {(driversLoading || cleanersLoading) ? (
                         <div className="py-20 flex justify-center">
                             <Loader size={40} text="Loading staff data..." />
                         </div>
-                    ) : (drivers.length === 0 && cleaners.length === 0) ? (
-                        <div className="p-12 text-center text-slate-500">No staff found with "DRIVER" or "CLEANER" designation in HRMS.</div>
+                    ) : (staffSubTab === 'drivers' ? drivers : cleaners).length === 0 ? (
+                        <div className="p-12 text-center text-slate-500">No {staffSubTab} found in HRMS.</div>
                     ) : (
                         <div className="overflow-x-auto w-full">
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold tracking-wider">
                                         <th className="px-4 py-3">Employee Details</th>
-                                        <th className="px-4 py-3">Role</th>
                                         <th className="px-4 py-3">Employee ID</th>
                                         <th className="px-4 py-3">Phone Number</th>
                                         <th className="px-4 py-3">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {[
-                                        ...drivers.map(d => ({ ...d, role: 'Driver' })),
-                                        ...cleaners.map(c => ({ ...c, role: 'Cleaner' }))
-                                    ].map((staff) => (
+                                    {(staffSubTab === 'drivers' ? drivers : cleaners).map((staff) => (
                                         <tr key={staff._id} className="hover:bg-blue-50/30 transition-colors">
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center">
-                                                    <div className={`p-1.5 rounded-lg mr-3 ${staff.role === 'Driver' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
+                                                    <div className={`p-1.5 rounded-lg mr-3 ${staffSubTab === 'drivers' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
                                                         <User size={18} />
                                                     </div>
                                                     <div>
                                                         <p className="font-bold text-slate-800 text-sm">{staff.employee_name}</p>
+                                                        <p className="text-[10px] text-slate-500 uppercase font-black">{staffSubTab === 'drivers' ? 'Driver' : 'Cleaner'}</p>
                                                     </div>
                                                 </div>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${staff.role === 'Driver' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
-                                                    {staff.role}
-                                                </span>
                                             </td>
                                             <td className="px-4 py-3 text-sm text-slate-600 font-medium">{staff.emp_no}</td>
                                             <td className="px-4 py-3 text-sm text-slate-600">{staff.phone_number || <span className="text-slate-400 italic text-xs">--</span>}</td>
