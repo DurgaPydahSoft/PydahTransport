@@ -16,11 +16,12 @@ const BusPassCard = forwardRef(({ passenger }, ref) => {
         stage_name,
         bus_id,
         student_photo,
-        qr_token
+        pin_no
     } = passenger;
 
     const name = student_name || employee_name || 'N/A';
-    const idNumber = admission_number || emp_no || 'N/A';
+    const admNo = admission_number || emp_no || 'N/A';
+    const pinNo = pin_no || 'N/A';
     const type = user_type || 'Student';
     const displayCourse = course || department || 'N/A';
     const displayBranch = branch ? `- ${branch}` : '';
@@ -52,31 +53,31 @@ const BusPassCard = forwardRef(({ passenger }, ref) => {
                         .header {
                             background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
                             color: white;
-                            padding: 4mm;
+                            padding: 3mm;
                             display: flex;
                             justify-content: space-between;
                             align-items: center;
                         }
                         .header-title {
-                            font-size: 14pt;
+                            font-size: 13pt;
                             font-weight: 800;
                             text-transform: uppercase;
                             letter-spacing: 0.5mm;
                         }
                         .header-subtitle {
-                            font-size: 6pt;
+                            font-size: 5pt;
                             opacity: 0.9;
                             font-weight: 500;
                         }
                         .content {
                             display: flex;
-                            padding: 3mm;
+                            padding: 2mm 3mm;
                             flex: 1;
                             gap: 3mm;
                         }
                         .photo-box {
-                            width: 22mm;
-                            height: 28mm;
+                            width: 20mm;
+                            height: 25mm;
                             border: 0.5mm solid #cbd5e1;
                             background-color: #f8fafc;
                             display: flex;
@@ -100,52 +101,43 @@ const BusPassCard = forwardRef(({ passenger }, ref) => {
                             flex: 1;
                             display: flex;
                             flex-direction: column;
-                            gap: 1mm;
+                            gap: 0.5mm;
                         }
                         .detail-row {
                             display: flex;
                             flex-direction: column;
                         }
                         .label {
-                            font-size: 5pt;
+                            font-size: 4.5pt;
                             color: #64748b;
                             text-transform: uppercase;
                             font-weight: 700;
                             line-height: 1;
                         }
                         .value {
-                            font-size: 8pt;
+                            font-size: 7.5pt;
                             font-weight: 700;
                             color: #1e293b;
-                            line-height: 1.2;
+                            line-height: 1.1;
                         }
                         .footer {
                             background-color: #f1f5f9;
-                            padding: 2mm 4mm;
+                            padding: 2mm 3mm;
                             display: flex;
                             justify-content: space-between;
                             align-items: center;
-                            border-top: 0.2mm solid #e2e8f0;
-                        }
-                        .qr-box {
-                            width: 10mm;
-                            height: 10mm;
-                            background-color: #cbd5e1;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            font-size: 4pt;
+                            border-top: 0.1mm solid #e2e8f0;
                         }
                         .bus-id-badge {
                             background-color: #1e40af;
                             color: white;
                             padding: 0.5mm 2mm;
                             border-radius: 3mm;
-                            font-size: 7pt;
+                            font-size: 6pt;
                             font-weight: 800;
                         }
                         .type-badge {
-                            font-size: 6pt;
+                            font-size: 5pt;
                             font-weight: 800;
                             text-transform: uppercase;
                             color: #1e40af;
@@ -159,7 +151,7 @@ const BusPassCard = forwardRef(({ passenger }, ref) => {
                             <div className="header-title">BUS PASS</div>
                             <div className="header-subtitle">Pydah Transport Services</div>
                         </div>
-                        <div className="type-badge" style={{color: 'white', background: 'rgba(255,255,255,0.2)', padding: '1mm 2mm', borderRadius: '1mm'}}>
+                        <div className="type-badge" style={{color: 'white', background: 'rgba(255,255,255,0.2)', padding: '0.5mm 1.5mm', borderRadius: '1mm'}}>
                             {type}
                         </div>
                     </div>
@@ -175,31 +167,41 @@ const BusPassCard = forwardRef(({ passenger }, ref) => {
                         <div className="details">
                             <div className="detail-row">
                                 <div className="label">Name</div>
-                                <div className="value" style={{fontSize: '9pt', color: '#1e40af'}}>{name}</div>
+                                <div className="value" style={{fontSize: '8pt', color: '#1e40af'}}>{name}</div>
                             </div>
-                            <div className="detail-row">
-                                <div className="label">ID Number</div>
-                                <div className="value">{idNumber}</div>
-                            </div>
+                            
+                            {type.toLowerCase() === 'employee' ? (
+                                <div className="detail-row">
+                                    <div className="label">Employee No</div>
+                                    <div className="value">{admNo}</div>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="detail-row">
+                                        <div className="label">Admission No</div>
+                                        <div className="value">{admNo}</div>
+                                    </div>
+                                    <div className="detail-row">
+                                        <div className="label">PIN Number</div>
+                                        <div className="value">{pinNo}</div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="detail-row">
                                 <div className="label">Course / Dept</div>
-                                <div className="value" style={{fontSize: '7pt'}}>{displayCourse} {displayBranch}</div>
+                                <div className="value" style={{fontSize: '6.5pt'}}>{displayCourse} {displayBranch}</div>
                             </div>
-                            <div className="detail-row" style={{marginTop: '1mm'}}>
+                            <div className="detail-row">
                                 <div className="label">Route & Stage</div>
-                                <div className="value" style={{fontSize: '7pt'}}>{route_name} - {stage_name}</div>
+                                <div className="value" style={{fontSize: '6.5pt'}}>{route_name} - {stage_name}</div>
                             </div>
                         </div>
                     </div>
 
                     <div className="footer">
-                        <div style={{display: 'flex', alignItems: 'center', gap: '2mm'}}>
-                            <div className="qr-box">
-                                {qr_token ? 'QR' : 'ID'}
-                            </div>
-                            <div style={{fontSize: '5pt', color: '#64748b'}}>
-                                Valid for Academic Session<br/>2025-2026
-                            </div>
+                        <div style={{fontSize: '4.5pt', color: '#64748b', fontWeight: '700'}}>
+                            VALID FOR ACADEMIC SESSION 2025-2026
                         </div>
                         <div className="bus-id-badge">
                             BUS: {bus_id || 'N/A'}
