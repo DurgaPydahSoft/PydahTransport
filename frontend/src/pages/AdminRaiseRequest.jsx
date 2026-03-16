@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import Layout from '../components/Layout';
+import Loader from '../components/Loader';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -249,10 +250,7 @@ const AdminRaiseRequest = () => {
                         </div>
                         {loading && (
                             <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                                <span className="flex h-4 w-4 relative">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500"></span>
-                                </span>
+                                <Loader size={20} text="" className="p-0" />
                             </div>
                         )}
                     </div>
@@ -304,7 +302,11 @@ const AdminRaiseRequest = () => {
                             </ul>
                         ) : (
                             <div className="p-12 text-center text-slate-400 text-sm">
-                                {loading ? 'Fetching records...' : activeTab === 'new' ? 'Search for a student to begin.' : 'Search for an approved passenger.'}
+                                {loading ? (
+                                    <Loader text="Fetching records..." />
+                                ) : (
+                                    activeTab === 'new' ? 'Search for a student to begin.' : 'Search for an approved passenger.'
+                                )}
                             </div>
                         )}
                     </div>

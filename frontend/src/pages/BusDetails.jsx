@@ -6,6 +6,7 @@ import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import PassengerReport from '../components/PassengerReport';
 import BusPassCard from '../components/BusPassCard';
+import Loader from '../components/Loader';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -104,7 +105,9 @@ const BusDetails = () => {
     if (loading) {
         return (
             <Layout>
-                <div className="text-center py-20 text-gray-500">Loading bus details…</div>
+                <div className="py-20">
+                    <Loader text="Loading bus details..." />
+                </div>
             </Layout>
         );
     }

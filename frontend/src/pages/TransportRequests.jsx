@@ -4,6 +4,7 @@ import { CreditCard, Trash2, Check, X } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import BusPassCard from '../components/BusPassCard';
+import Loader from '../components/Loader';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -327,7 +328,9 @@ const TransportRequests = () => {
                 )}
             </div>
             {loading ? (
-                <div className="text-center py-20 text-gray-500">Loading requests...</div>
+                <div className="py-20">
+                    <Loader text="Loading requests..." />
+                </div>
             ) : requests.length === 0 ? (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
                     <p className="text-gray-500">No transport requests found.</p>

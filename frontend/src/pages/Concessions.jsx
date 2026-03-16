@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import Loader from '../components/Loader';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -205,11 +206,8 @@ const Concessions = () => {
                         <tbody className="divide-y divide-gray-50 text-sm text-gray-700">
                             {loading ? (
                                 <tr>
-                                    <td colSpan="9" className="p-10 text-center text-gray-400">
-                                        <div className="flex flex-col items-center gap-3">
-                                            <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-                                            <span>Loading concessions data...</span>
-                                        </div>
+                                    <td colSpan="9" className="p-10">
+                                        <Loader text="Loading concessions data..." />
                                     </td>
                                 </tr>
                             ) : concessions.length === 0 ? (
