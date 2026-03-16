@@ -13,13 +13,16 @@ import {
     X,
     PlusCircle,
     Percent,
-    Package
+    Package,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(false);
 
     const handleLogout = () => {
         const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
@@ -50,7 +53,7 @@ const Layout = ({ children }) => {
         { path: '/buses', label: 'Bus Management', permission: 'bus_management', icon: <Bus size={20} /> },
         { path: '/fleet', label: 'Fleet & Passengers', permission: 'fleet_passengers', icon: <Users size={20} /> },
         { path: '/routes', label: 'Route Management', permission: 'route_management', icon: <Map size={20} /> },
-        { path: '/inventory', label: 'Inventory', icon: <Package size={20} /> },
+        { path: '/inventory', label: 'Inventory', icon: <Package size={20} />, permission: 'inventory' },
         { path: '/transport-requests', label: 'Requests', permission: 'transport_requests', icon: <ClipboardList size={20} /> },
         { path: '/raise-request', label: 'Raise Request', permission: 'raise_request', icon: <PlusCircle size={20} /> },
         { path: '/concessions', label: 'Concessions', permission: 'concessions', icon: <Percent size={20} /> },
@@ -63,61 +66,76 @@ const Layout = ({ children }) => {
     return (
         <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
             {/* Sidebar (Desktop) */}
-            <aside className="w-72 bg-white shadow-xl hidden md:flex flex-col z-20">
-                <div className="h-20 flex items-center justify-center border-b border-gray-100 px-6">
-                    <div className="flex items-center gap-3">
+            <aside className={`${isCollapsed ? 'w-20' : 'w-64'} bg-white shadow-xl hidden md:flex flex-col z-20 transition-all duration-300 relative`}>
+                {/* Collapse Toggle Button */}
+                <button 
+                    onClick={() => setIsCollapsed(!isCollapsed)}
+                    className="absolute -right-3 top-24 bg-white border border-gray-100 rounded-full p-1 shadow-md z-30 hover:bg-gray-50 text-blue-900 group"
+                >
+                    {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                </button>
+
+                <div className={`h-22 flex items-center ${isCollapsed ? 'justify-center' : 'px-6'} border-b border-gray-100 py-4 transition-all duration-300`}>
+                    <div className="flex items-center gap-3 overflow-hidden">
                         <img
                             src="/Gemini_Generated_Image_uu0hhduu0hhduu0h.png"
                             alt="Logo"
-                            className="h-15 w-auto object-contain"
+                            className="h-10 w-10 object-contain flex-shrink-0"
                         />
-                        <h1 className="text-l font-bold text-blue-900 truncate tracking-wide">
-                            PYDAH TRANSPORT
-                        </h1>
+                        {!isCollapsed && (
+                            <h1 className="text-xl font-bold text-blue-900 tracking-tight whitespace-nowrap animate-in fade-in slide-in-from-left-2">
+                                 TRANSPORT
+                            </h1>
+                        )}
                     </div>
                 </div>
-                <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
+                <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto custom-scrollbar">
                     {menuItems.map((item) => (
                         <Link
                             key={item.path}
                             to={item.path}
-                            className={`flex items-center px-4 py-3 rounded-xl transition-all duration-200 group relative overflow-hidden ${location.pathname === item.path
+                            title={isCollapsed ? item.label : ""}
+                            className={`flex items-center ${isCollapsed ? 'justify-center px-0' : 'px-4'} py-3 rounded-xl transition-all duration-200 group relative overflow-hidden ${location.pathname === item.path
                                 ? 'bg-slate-900 text-white shadow-md font-semibold'
                                 : 'text-slate-900 hover:bg-slate-100 hover:text-black font-medium'
                                 }`}
                         >
-                            <span className={`mr-3 transition-colors ${location.pathname === item.path ? 'text-white' : 'text-slate-900 group-hover:text-black'
+                            <span className={`${isCollapsed ? 'mr-0' : 'mr-3'} transition-all duration-200 ${location.pathname === item.path ? 'text-white' : 'text-slate-900 group-hover:text-black'
                                 }`}>
                                 {item.icon}
                             </span>
-                            <span className="truncate text-sm">{item.label}</span>
+                            {!isCollapsed && <span className="truncate text-sm animate-in fade-in slide-in-from-left-2">{item.label}</span>}
 
-                            {location.pathname === item.path && (
+                            {(location.pathname === item.path && !isCollapsed) && (
                                 <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-400 rounded-l-md"></span>
                             )}
                         </Link>
                     ))}
                 </nav>
-                <div className="p-4 border-t border-gray-100">
-                    <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 rounded-xl border border-slate-100 transition-all duration-300">
-                        <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm border-2 border-white shadow-sm flex-shrink-0">
+                <div className={`p-3 border-t border-gray-100 bg-gray-50/50 ${isCollapsed ? 'flex justify-center' : ''}`}>
+                    <div className={`flex items-center ${isCollapsed ? 'justify-center w-12 h-12' : 'gap-3 px-3 py-2 bg-white'} rounded-xl border border-slate-100 transition-all duration-300 shadow-sm`}>
+                        <div className={`w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm border-2 border-white shadow-sm flex-shrink-0 transition-all duration-300 ${isCollapsed ? 'scale-110' : ''}`}>
                             {(adminInfo.name || adminInfo.username || 'U').charAt(0).toUpperCase()}
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate leading-tight">
-                                {adminInfo.name || adminInfo.username || 'User'}
-                            </p>
-                            <p className="text-[10px] uppercase font-black text-slate-400 truncate tracking-tighter">
-                                {adminInfo.role || 'Guest'}
-                            </p>
-                        </div>
-                        <button
-                            onClick={handleLogout}
-                            title="Logout"
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 group"
-                        >
-                            <LogOut size={18} className="group-hover:scale-110 transition-transform" />
-                        </button>
+                        {!isCollapsed && (
+                            <>
+                                <div className="flex-1 min-w-0 animate-in fade-in duration-300">
+                                    <p className="text-[11px] font-bold text-slate-900 truncate leading-tight">
+                                        {adminInfo.name || adminInfo.username || 'User'}
+                                    </p>
+                                    <p className="text-[9px] uppercase font-black text-slate-400 truncate tracking-tighter">
+                                        {adminInfo.role || 'Guest'}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleLogout}
+                                    title="Logout"
+                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 group"
+                                >
+                                    <LogOut size={16} className="group-hover:scale-110 transition-transform" />
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </aside>
@@ -131,7 +149,7 @@ const Layout = ({ children }) => {
             )}
 
             {/* Sidebar (Mobile) */}
-            <aside className={`fixed inset-y-0 left-0 w-72 bg-white shadow-2xl flex flex-col z-40 transform transition-transform duration-300 md:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+            <aside className={`fixed inset-y-0 left-0 w-64 bg-white shadow-2xl flex flex-col z-40 transform transition-transform duration-300 md:hidden ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
                 }`}>
                 <div className="h-16 flex justify-between items-center border-b border-gray-100 px-6">
                     <h1 className="text-lg font-bold text-blue-900 truncate">Pydah Transport</h1>

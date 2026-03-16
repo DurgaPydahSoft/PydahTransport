@@ -29,6 +29,7 @@ const UserManagement = () => {
         { id: 'user_management', label: 'User Management' },
         { id: 'raise_request', label: 'Raise Request' },
         { id: 'concessions', label: 'Concessions' },
+        { id: 'inventory', label: 'Inventory' },
     ];
 
     useEffect(() => {
