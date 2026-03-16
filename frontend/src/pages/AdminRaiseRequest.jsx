@@ -7,6 +7,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 const AdminRaiseRequest = () => {
     const [activeTab, setActiveTab] = useState('new'); // 'new' or 'change'
     const [changeType, setChangeType] = useState('route'); // 'route' or 'stage'
+    const [userType, setUserType] = useState('student'); // 'student' or 'employee'
     const [searchQuery, setSearchQuery] = useState('');
     const [students, setStudents] = useState([]);
     const [approvedStudents, setApprovedStudents] = useState([]);
@@ -25,30 +26,48 @@ const AdminRaiseRequest = () => {
         id: adminInfo.id || adminInfo.userId || 1 
     };
 
+
     useEffect(() => {
+        const fetchRoutes = async () => {
+            try {
+                const response = await fetch(`${API_BASE}/routes`);
+                const data = await response.json();
+                setRoutes(data);
+            } catch (error) {
+                console.error('Error fetching routes:', error);
+            }
+        };
         fetchRoutes();
     }, []);
 
-    const fetchRoutes = async () => {
-        try {
-            const response = await fetch(`${API_BASE}/routes`);
-            const data = await response.json();
-            setRoutes(data);
-        } catch (error) {
-            console.error('Error fetching routes:', error);
-        }
-    };
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (searchQuery.trim().length >= 2) {
+                performSearch(searchQuery);
+            } else if (searchQuery.trim().length === 0) {
+                setStudents([]);
+                setApprovedStudents([]);
+            }
+        }, 300);
 
-    const handleSearch = async (e) => {
-        e.preventDefault();
-        if (!searchQuery) return;
+        return () => clearTimeout(timer);
+    }, [searchQuery, activeTab, userType]);
+
+    const performSearch = async (query) => {
+        if (!query) return;
         setLoading(true);
         try {
             const endpoint = activeTab === 'new' 
-                ? `${API_BASE}/students/search?q=${encodeURIComponent(searchQuery)}`
+                ? (userType === 'employee' ? `${API_BASE}/employees/search?q=${encodeURIComponent(searchQuery)}` : `${API_BASE}/students/search?q=${encodeURIComponent(searchQuery)}`)
                 : `${API_BASE}/transport-requests/approved-passengers?q=${encodeURIComponent(searchQuery)}`;
             
-            const response = await fetch(endpoint);
+            const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
+            const response = await fetch(endpoint, {
+                headers: {
+                    'Authorization': `Bearer ${adminInfo.token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
             const data = await response.json();
             
             if (activeTab === 'new') {
@@ -56,7 +75,6 @@ const AdminRaiseRequest = () => {
             } else {
                 setApprovedStudents(data);
             }
-            setSelectedStudent(null);
         } catch (error) {
             console.error('Error searching students:', error);
         } finally {
@@ -108,14 +126,15 @@ const AdminRaiseRequest = () => {
                 admin_name: admin.name,
                 admin_id: admin.id
             } : {
-                admission_number: selectedStudent.admission_number || selectedStudent.admission_no,
-                student_name: selectedStudent.student_name,
+                admission_number: selectedStudent.admission_number || selectedStudent.admission_no || selectedStudent.emp_no,
+                student_name: selectedStudent.student_name || selectedStudent.employee_name,
                 route_id: selectedRoute.routeId,
                 route_name: selectedRoute.routeName,
                 stage_name: selectedStage.stageName,
                 fare: selectedStage.fare,
                 raised_by: 'admin',
-                raised_by_id: admin.id
+                raised_by_id: admin.id,
+                user_type: userType
             };
 
             const response = await fetch(endpoint, {
@@ -128,7 +147,7 @@ const AdminRaiseRequest = () => {
                 const resData = await response.json();
                 const successMsg = isChange 
                     ? `Route change processed. Fare Difference: ₹${resData.fareDifference}`
-                    : 'Transport request raised successfully on behalf of the student.';
+                    : `Transport request raised successfully on behalf of the ${userType}.`;
                 
                 setMessage({ text: successMsg, type: 'success' });
                 // Reset form
@@ -183,53 +202,105 @@ const AdminRaiseRequest = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Student Selection */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">1</span>
-                        {activeTab === 'new' ? 'Select Student' : 'Find Passenger'}
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">1</span>
+                            {activeTab === 'new' ? 'Select Passenger' : 'Find Passenger'}
+                        </div>
+                        {activeTab === 'new' && (
+                            <div className="bg-slate-100 p-1 rounded-lg flex text-xs">
+                                <button
+                                    onClick={() => {
+                                        setUserType('student');
+                                        setStudents([]);
+                                        setSelectedStudent(null);
+                                        setSearchQuery('');
+                                    }}
+                                    className={`px-3 py-1.5 rounded-md font-bold transition-all ${userType === 'student' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Student
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setUserType('employee');
+                                        setStudents([]);
+                                        setSelectedStudent(null);
+                                        setSearchQuery('');
+                                    }}
+                                    className={`px-3 py-1.5 rounded-md font-bold transition-all ${userType === 'employee' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Employee
+                                </button>
+                            </div>
+                        )}
                     </h3>
-                    <form onSubmit={handleSearch} className="flex gap-2 mb-6">
-                        <input
-                            type="text"
-                            placeholder={activeTab === 'new' ? "Search Name or Admission No..." : "Search Approved Passenger..."}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                        />
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md active:scale-95"
-                        >
-                            {loading ? '...' : 'Search'}
-                        </button>
-                    </form>
+                    <div className="flex gap-2 mb-6 relative">
+                        <div className="flex-1 relative">
+                            <input
+                                type="text"
+                                placeholder={activeTab === 'new' ? `Type to search ${userType === 'employee' ? 'Employee' : 'Student'} Name or ID...` : "Type to search Approved Passenger..."}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full rounded-xl border border-slate-200 pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                            />
+                            <svg className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        {loading && (
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                <span className="flex h-4 w-4 relative">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500"></span>
+                                </span>
+                            </div>
+                        )}
+                    </div>
 
                     <div className="max-h-[400px] overflow-y-auto border border-slate-100 rounded-xl custom-scrollbar pr-1">
                         {(activeTab === 'new' ? students : approvedStudents).length > 0 ? (
                             <ul className="divide-y divide-slate-50">
-                                {(activeTab === 'new' ? students : approvedStudents).map(s => (
+                                {(activeTab === 'new' ? students : approvedStudents).map(s => {
+                                    const uniqueId = s.id || s._id || s.emp_no || s.pin_no || s.admission_number || s.admission_no;
+                                    const selectedId = selectedStudent?.id || selectedStudent?._id || selectedStudent?.emp_no || selectedStudent?.pin_no || selectedStudent?.admission_number || selectedStudent?.admission_no;
+                                    return (
                                     <li
-                                        key={s.id}
+                                        key={uniqueId}
                                         onClick={() => handleSelectStudent(s)}
-                                        className={`p-4 cursor-pointer hover:bg-slate-50 transition-all rounded-lg m-1 ${selectedStudent?.id === s.id ? 'bg-blue-50 border border-blue-100 shadow-sm' : 'border border-transparent'}`}
+                                        className={`p-4 cursor-pointer hover:bg-slate-50 transition-all rounded-lg m-1 ${selectedId === uniqueId ? 'bg-blue-50 border border-blue-100 shadow-sm' : 'border border-transparent'}`}
                                     >
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <div className="font-bold text-slate-900">{s.student_name}</div>
-                                                <div className="text-xs text-slate-500 mt-0.5 font-medium">ADMN: {s.admission_number || s.admission_no}</div>
+                                                <div className="font-bold text-slate-900">{s.student_name || s.employee_name}</div>
+                                                <div className="text-xs text-slate-500 mt-0.5 font-medium flex items-center gap-2">
+                                                    {userType === 'employee' ? (
+                                                        <span className="badge">ID: {s.emp_no}</span>
+                                                    ) : (
+                                                        <span className="badge">
+                                                            PIN: {s.pin_no || 'N/A'} <span className="opacity-50 mx-1">|</span> Adm No: {s.admission_number || s.admission_no || 'N/A'}
+                                                        </span>
+                                                    )}
+                                                    {s.email && <span className="opacity-70 truncate px-1 border-l border-slate-200 ml-1 pl-2">{s.email}</span>}
+                                                    {s.phone_number && <span className="opacity-70 px-1 border-l border-slate-200 ml-1 pl-2">{s.phone_number}</span>}
+                                                </div>
                                             </div>
-                                            <div className="text-[10px] px-2 py-1 bg-white border border-slate-100 rounded-full font-bold text-slate-400">
-                                                Year {s.current_year || s.year_of_study}
-                                            </div>
+                                            {(s.current_year || s.year_of_study) && (
+                                                <div className="text-[10px] px-2 py-1 bg-white border border-slate-100 rounded-full font-bold text-slate-400">
+                                                    Year {s.current_year || s.year_of_study}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="text-xs text-slate-400 mt-2 flex items-center gap-2">
-                                            <span className="truncate">{s.course}</span>
+                                            <span className="truncate">
+                                                {userType === 'employee' ? (s.department || 'Employee') : `Course: ${s.course || 'N/A'}${s.branch ? ` - ${s.branch}` : ''}`}
+                                            </span>
                                             {activeTab === 'change' && (
                                                 <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded font-black text-[9px] uppercase tracking-tighter">Current: {s.route_name}</span>
                                             )}
                                         </div>
                                     </li>
-                                ))}
+                                    );
+                                })}
                             </ul>
                         ) : (
                             <div className="p-12 text-center text-slate-400 text-sm">
@@ -275,12 +346,12 @@ const AdminRaiseRequest = () => {
                             <div className="p-4 bg-slate-50 rounded-2xl text-sm border border-slate-100 relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-blue-100/50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
                                 <div className="relative z-10">
-                                    <p className="text-[10px] uppercase font-black text-slate-400 mb-1 tracking-widest">Selected Student</p>
-                                    <p className="font-black text-slate-900 text-lg uppercase leading-none">{selectedStudent.student_name}</p>
+                                    <p className="text-[10px] uppercase font-black text-slate-400 mb-1 tracking-widest">Selected {userType === 'employee' ? 'Employee' : 'Student'}</p>
+                                    <p className="font-black text-slate-900 text-lg uppercase leading-none">{selectedStudent.student_name || selectedStudent.employee_name}</p>
                                     <div className="flex gap-4 mt-3">
                                         <div className="px-2.5 py-1 bg-white rounded-lg shadow-sm border border-slate-100 inline-block min-w-[70px] text-center">
-                                            <p className="text-[8px] font-black text-slate-400 uppercase leading-none">Admission</p>
-                                            <span className="text-xs font-bold text-blue-700">{selectedStudent.admission_number || selectedStudent.admission_no}</span>
+                                            <p className="text-[8px] font-black text-slate-400 uppercase leading-none">ID Number</p>
+                                            <span className="text-xs font-bold text-blue-700">{selectedStudent.admission_number || selectedStudent.admission_no || selectedStudent.emp_no}</span>
                                         </div>
                                         {activeTab === 'change' && (
                                             <div className="px-2.5 py-1 bg-emerald-50 rounded-lg shadow-sm border border-emerald-100 inline-block min-w-[70px] text-center">
@@ -321,7 +392,7 @@ const AdminRaiseRequest = () => {
                                         >
                                             <option value="">Select a stage point</option>
                                             {selectedRoute.stages.map(s => (
-                                                <option key={s.stageName} value={s.stageName}>{s.stageName} — ₹{s.fare}</option>
+                                                <option key={s.stageName} value={s.stageName}>{s.stageName} — {userType === 'employee' ? 'Free (₹0)' : `₹${s.fare}`}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -331,7 +402,7 @@ const AdminRaiseRequest = () => {
                                     <div className="p-5 bg-blue-600 rounded-2xl shadow-lg shadow-blue-200/50 border border-blue-500 transform transition-all duration-300 animate-in zoom-in-95">
                                         <div className="flex justify-between items-center mb-4">
                                             <span className="text-blue-100 text-xs font-bold uppercase tracking-wider">New Adjusted Fare</span>
-                                            <span className="text-3xl font-black text-white">₹{selectedStage.fare}</span>
+                                            <span className="text-3xl font-black text-white">₹{userType === 'employee' ? 0 : selectedStage.fare}</span>
                                         </div>
                                         
                                         {activeTab === 'change' && (

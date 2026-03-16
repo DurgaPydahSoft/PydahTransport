@@ -99,12 +99,16 @@ const TransportRequests = () => {
     const totalPages = Math.ceil(requests.length / rowsPerPage);
 
     const openApproveModal = async (requestId) => {
-        setApproveModal({ open: true, requestId, data: null, loading: true, error: null });
+        setApproveModal({ open: true, requestId, data: null, selectedBusId: '', loading: true, error: null });
         try {
             const response = await fetch(`${API_BASE}/transport-requests/${requestId}/semester-options`);
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
-                setApproveModal((m) => ({ ...m, data, loading: false, error: null }));
+                let defaultBusId = '';
+                if (data.busesOnRoute && data.busesOnRoute.length === 1) {
+                    defaultBusId = data.busesOnRoute[0].busNumber;
+                }
+                setApproveModal((m) => ({ ...m, data, selectedBusId: defaultBusId, loading: false, error: null }));
             } else {
                 setApproveModal((m) => ({ ...m, loading: false, error: data.message || 'Failed to load semester options' }));
             }
@@ -114,19 +118,25 @@ const TransportRequests = () => {
     };
 
     const closeApproveModal = () => {
-        setApproveModal({ open: false, requestId: null, data: null, loading: true, error: null });
+        setApproveModal({ open: false, requestId: null, data: null, selectedBusId: '', loading: true, error: null });
     };
 
     const handleConfirmApprove = async () => {
         const id = approveModal.requestId;
         if (!id) return;
+        
+        if (approveModal.data?.busesOnRoute?.length > 0 && !approveModal.selectedBusId) {
+            setApproveModal(m => ({ ...m, error: 'Please select a bus to assign the passenger to.' }));
+            return;
+        }
+
         setActionLoading(id);
         setMessage({ text: '', type: '' });
         try {
             const response = await fetch(`${API_BASE}/transport-requests/${id}/approve`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
+                body: JSON.stringify({ bus_id: approveModal.selectedBusId || null }),
             });
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
@@ -359,7 +369,8 @@ const TransportRequests = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
-                                    <th className="p-4">Admission No</th>
+                                    <th className="p-4">Type</th>
+                                    <th className="p-4">ID Number</th>
                                     <th className="p-4">Name</th>
                                     <th className="p-4">Course</th>
                                     <th className="p-4 text-center">Year</th>
@@ -374,17 +385,24 @@ const TransportRequests = () => {
                             <tbody className="divide-y divide-gray-50 text-sm text-gray-700">
                                 {currentRequests.map((req) => (
                                     <tr key={req.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="p-4 font-medium text-blue-600">{req.admission_number}</td>
-                                        <td className="p-4 font-medium text-gray-900">{req.student_name}</td>
+                                        <td className="p-4">
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${req.user_type === 'employee' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                {req.user_type || 'student'}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 font-medium text-blue-600">{req.admission_number || req.emp_no}</td>
+                                        <td className="p-4 font-medium text-gray-900">{req.student_name || req.employee_name}</td>
                                         <td className="p-4 text-xs font-semibold uppercase text-gray-500">{req.course || '—'}</td>
                                         <td className="p-4 text-center">
-                                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
-                                                Y{req.year_of_study || '—'}
-                                            </span>
+                                            {req.user_type === 'employee' ? '—' : (
+                                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                                                    Y{req.year_of_study || '—'}
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="p-4">{req.route_name}</td>
                                         <td className="p-4">{req.stage_name}</td>
-                                        <td className="p-4 font-medium text-gray-900">₹{req.fare}</td>
+                                        <td className="p-4 font-medium text-gray-900">{req.user_type === 'employee' ? 'Free (₹0)' : `₹${req.fare}`}</td>
                                         <td className="p-4">
                                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${(req.status || '').toLowerCase() === 'approved' ? 'bg-green-100 text-green-700' :
                                                 (req.status || '').toLowerCase() === 'pending' ? 'bg-yellow-100 text-yellow-700' :
@@ -456,38 +474,52 @@ const TransportRequests = () => {
                 {!approveModal.loading && approveModal.data && (
                     <>
                         <div className="mb-4 p-3 bg-gray-50 rounded-xl text-sm">
-                            <p><span className="font-medium text-gray-600">Student:</span> {approveModal.data.studentName}</p>
-                            <p><span className="font-medium text-gray-600">Admission No:</span> {approveModal.data.admissionNumber}</p>
-                            <p><span className="font-medium text-gray-600">Course / Year:</span> {approveModal.data.course} – Year {approveModal.data.yearOfStudy}</p>
+                            <p><span className="font-medium text-gray-600">{approveModal.data.user_type === 'employee' ? 'Employee' : 'Student'}:</span> {approveModal.data.studentName}</p>
+                            <p><span className="font-medium text-gray-600">ID Number:</span> {approveModal.data.admissionNumber}</p>
+                            {approveModal.data.user_type !== 'employee' && (
+                                <p><span className="font-medium text-gray-600">Course / Year:</span> {approveModal.data.course} – Year {approveModal.data.yearOfStudy}</p>
+                            )}
                         </div>
                         {approveModal.data.route_name && (
                             <div className="mb-4 p-4 rounded-xl border border-blue-100 bg-blue-50">
                                 <p className="text-sm font-semibold text-blue-900 mb-2">Route: {approveModal.data.route_name} {approveModal.data.route_id && <span className="text-blue-600">({approveModal.data.route_id})</span>}</p>
                                 {approveModal.data.busesOnRoute && approveModal.data.busesOnRoute.length > 0 ? (
                                     <>
-                                        <p className="text-xs text-blue-800 mb-2">Buses on this route (capacity):</p>
-                                        <ul className="space-y-1.5">
+                                        <p className="text-xs font-semibold text-blue-800 mb-2">Select a Bus to Assign:</p>
+                                        <select 
+                                            value={approveModal.selectedBusId}
+                                            onChange={(e) => setApproveModal(m => ({ ...m, selectedBusId: e.target.value, error: null }))}
+                                            className="w-full text-sm p-2 border border-blue-200 rounded outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                                        >
+                                            <option value="">-- Choose Bus --</option>
                                             {approveModal.data.busesOnRoute.map((b) => (
-                                                <li key={b.busNumber} className="flex items-center justify-between text-sm">
-                                                    <span className="font-medium">{b.busNumber}</span>
-                                                    <span className="text-blue-700">Filled: {b.seatsFilled} / {b.capacity} · {b.seatsAvailable} available</span>
-                                                </li>
+                                                <option key={b.busNumber} value={b.busNumber}>
+                                                    {b.busNumber} (Filled: {b.seatsFilled}/{b.capacity} | {b.seatsAvailable} available)
+                                                </option>
                                             ))}
-                                        </ul>
+                                        </select>
                                     </>
                                 ) : (
                                     <p className="text-sm text-blue-700">No buses assigned to this route yet. Assign in Bus Management → Bus–Route mapping.</p>
                                 )}
                             </div>
                         )}
-                        <p className="text-sm text-gray-700 mb-2">Transport is valid until the <strong>end of the academic year</strong> (last semester), regardless of which sem the student applied in.</p>
-                        {approveModal.data.expiry ? (
-                            <div className="p-4 rounded-xl border border-green-200 bg-green-50 text-green-800">
-                                <p className="font-semibold">Expiry date: {formatDate(approveModal.data.expiry.expiry_date)}</p>
-                                <p className="text-sm mt-1">{approveModal.data.expiry.label}</p>
-                            </div>
+                        {approveModal.data.user_type !== 'employee' ? (
+                            <>
+                                <p className="text-sm text-gray-700 mb-2">Transport is valid until the <strong>end of the academic year</strong> (last semester), regardless of which sem the student applied in.</p>
+                                {approveModal.data.expiry ? (
+                                    <div className="p-4 rounded-xl border border-green-200 bg-green-50 text-green-800">
+                                        <p className="font-semibold">Expiry date: {formatDate(approveModal.data.expiry.expiry_date)}</p>
+                                        <p className="text-sm mt-1">{approveModal.data.expiry.label}</p>
+                                    </div>
+                                ) : (
+                                    <p className="text-gray-500 py-2">No semester config found for this course/year. Approval will still succeed; expiry will not be set.</p>
+                                )}
+                            </>
                         ) : (
-                            <p className="text-gray-500 py-2">No semester config found for this course/year. Approval will still succeed; expiry will not be set.</p>
+                            <p className="text-sm font-medium p-4 rounded-xl border bg-purple-50 text-purple-800 border-purple-200">
+                                Employee transport requests do not have academic expiry dates and are free of charge.
+                            </p>
                         )}
                         <div className="flex gap-3 mt-6">
                             <button

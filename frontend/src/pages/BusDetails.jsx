@@ -104,6 +104,9 @@ const BusDetails = () => {
     }
 
     const { bus, route, passengers, seatsFilled, seatsAvailable, capacity, occupancyPercent } = data;
+    
+    const studentCount = passengers.filter(p => !p.user_type || p.user_type === 'student').length;
+    const employeeCount = passengers.filter(p => p.user_type === 'employee').length;
 
     return (
         <Layout>
@@ -155,6 +158,16 @@ const BusDetails = () => {
                         <div className="bg-gray-50 rounded-lg p-3">
                             <p className="text-gray-500 text-xs">Available</p>
                             <p className="text-xl font-bold text-gray-800">{seatsAvailable}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm mt-2">
+                        <div className="bg-blue-50 rounded-lg p-3">
+                            <p className="text-blue-500 text-[10px] font-bold uppercase tracking-wider">Students</p>
+                            <p className="text-lg font-bold text-blue-700">{studentCount}</p>
+                        </div>
+                        <div className="bg-purple-50 rounded-lg p-3">
+                            <p className="text-purple-500 text-[10px] font-bold uppercase tracking-wider">Employees</p>
+                            <p className="text-lg font-bold text-purple-700">{employeeCount}</p>
                         </div>
                     </div>
                     <p className="text-gray-500 text-xs mt-2">Capacity: {capacity} seats</p>
@@ -209,7 +222,8 @@ const BusDetails = () => {
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
                                     <th className="p-4">#</th>
-                                    <th className="p-4">Admission No</th>
+                                    <th className="p-4">Type</th>
+                                    <th className="p-4">ID Number</th>
                                     <th className="p-4">Name</th>
                                     <th className="p-4">Stage</th>
                                     <th className="p-4">Fare</th>
@@ -219,10 +233,15 @@ const BusDetails = () => {
                                 {passengers.map((p, i) => (
                                     <tr key={p.id} className="hover:bg-gray-50">
                                         <td className="p-4 text-gray-500">{i + 1}</td>
-                                        <td className="p-4 font-medium text-blue-600">{p.admission_number}</td>
-                                        <td className="p-4">{p.student_name}</td>
+                                        <td className="p-4">
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${p.user_type === 'employee' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                {p.user_type || 'student'}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 font-medium text-gray-600">{p.admission_number || p.emp_no}</td>
+                                        <td className="p-4">{p.student_name || p.employee_name}</td>
                                         <td className="p-4">{p.stage_name}</td>
-                                        <td className="p-4">₹{p.fare}</td>
+                                        <td className="p-4 text-gray-500">{p.user_type === 'employee' ? 'Free (₹0)' : `₹${p.fare}`}</td>
                                     </tr>
                                 ))}
                             </tbody>

@@ -1,6 +1,10 @@
 const { mysqlPool, getFeeConnection } = require('../config/db');
 const { getFeePortalModels } = require('../models/fee-portal-models');
 const Bus = require('../models/Bus');
+const mongoose = require('mongoose');
+const EmployeeTransportRequest = require('../models/EmployeeTransportRequest');
+
+const isMongoId = (id) => mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
 
 const TRANSPORT_FEE_HEAD_CODE = 'TRN01';
 
@@ -37,15 +41,74 @@ async function getLastSemesterForRequest(mysqlPool, transportRequest) {
     };
 }
 
+// Get buses and their available capacities, combining counts from MySQL (students) and MongoDB (employees)
+async function getBusesWithSeatsForRoute(routeId) {
+    const buses = await Bus.find({ assignedRouteId: routeId }).lean();
+    if (buses.length === 0) return [];
+
+    const busNumbers = buses.map((b) => b.busNumber);
+    let mysqlCountMap = {};
+
+    if (mysqlPool) {
+        const placeholders = busNumbers.map(() => '?').join(',');
+        const [countRows] = await mysqlPool.query(
+            `SELECT bus_id AS busNumber, COUNT(*) AS seatsFilled FROM transport_requests WHERE status = 'approved' AND bus_id IN (${placeholders}) GROUP BY bus_id`,
+            busNumbers
+        );
+        mysqlCountMap = Object.fromEntries((countRows || []).map((r) => [r.busNumber, Number(r.seatsFilled)]));
+    }
+
+    const mongoCounts = await EmployeeTransportRequest.aggregate([
+        { $match: { status: 'approved', bus_id: { $in: busNumbers } } },
+        { $group: { _id: '$bus_id', count: { $sum: 1 } } }
+    ]);
+    const mongoCountMap = Object.fromEntries(mongoCounts.map(r => [r._id, r.count]));
+
+    return buses.map((b) => {
+        const capacity = b.capacity || 0;
+        const seatsFilled = (mysqlCountMap[b.busNumber] || 0) + (mongoCountMap[b.busNumber] || 0);
+        return {
+            busNumber: b.busNumber,
+            capacity,
+            seatsFilled,
+            seatsAvailable: Math.max(0, capacity - seatsFilled),
+        };
+    });
+}
+
 // @desc    Get expiry for a transport request (last sem of student's year – for approve popup)
 // @route   GET /api/transport-requests/:id/semester-options
 // @access  Private/Admin
 const getSemesterOptions = async (req, res) => {
     const requestId = req.params.id;
-    if (!mysqlPool) {
-        return res.status(500).json({ message: 'MySQL connection not established' });
-    }
+    
     try {
+        if (isMongoId(requestId)) {
+            const reqRow = await EmployeeTransportRequest.findById(requestId).lean();
+            if (!reqRow) return res.status(404).json({ message: 'Request not found' });
+            
+            const routeId = reqRow.route_id;
+            let busesOnRoute = [];
+            if (routeId) {
+                busesOnRoute = await getBusesWithSeatsForRoute(routeId);
+            }
+            return res.json({
+                requestId: String(reqRow._id),
+                studentName: reqRow.employee_name,
+                admissionNumber: reqRow.emp_no,
+                course: 'Employee',
+                yearOfStudy: null,
+                route_id: routeId,
+                route_name: reqRow.route_name,
+                busesOnRoute,
+                expiry: null, // Employees do not have semesters
+                user_type: 'employee'
+            });
+        }
+
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
         const [reqRows] = await mysqlPool.query('SELECT * FROM transport_requests WHERE id = ?', [requestId]);
         const transportRequest = reqRows[0];
         if (!transportRequest) {
@@ -60,38 +123,11 @@ const getSemesterOptions = async (req, res) => {
             'SELECT course, current_year FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
             [admissionNumber, admissionNumber]
         );
-        const student = studentRows[0] || {};
-        const routeId = transportRequest.route_id || null;
-        const routeName = transportRequest.route_name || null;
+        const routeId = transportRequest.route_id;
+        const routeName = transportRequest.route_name;
         let busesOnRoute = [];
         if (routeId) {
-            const buses = await Bus.find({ assignedRouteId: routeId }).lean();
-            if (mysqlPool && buses.length > 0) {
-                const busNumbers = buses.map((b) => b.busNumber);
-                const placeholders = busNumbers.map(() => '?').join(',');
-                const [countRows] = await mysqlPool.query(
-                    `SELECT bus_id AS busNumber, COUNT(*) AS seatsFilled FROM transport_requests WHERE status = 'approved' AND bus_id IN (${placeholders}) GROUP BY bus_id`,
-                    busNumbers
-                );
-                const countMap = Object.fromEntries((countRows || []).map((r) => [r.busNumber, Number(r.seatsFilled)]));
-                busesOnRoute = buses.map((b) => {
-                    const capacity = b.capacity || 0;
-                    const seatsFilled = countMap[b.busNumber] || 0;
-                    return {
-                        busNumber: b.busNumber,
-                        capacity,
-                        seatsFilled,
-                        seatsAvailable: Math.max(0, capacity - seatsFilled),
-                    };
-                });
-            } else {
-                busesOnRoute = buses.map((b) => ({
-                    busNumber: b.busNumber,
-                    capacity: b.capacity || 0,
-                    seatsFilled: 0,
-                    seatsAvailable: b.capacity || 0,
-                }));
-            }
+            busesOnRoute = await getBusesWithSeatsForRoute(routeId);
         }
         return res.json({
             requestId: Number(requestId),
@@ -165,8 +201,53 @@ const getTransportRequests = async (req, res) => {
         }
 
         sql += ' ORDER BY tr.request_date DESC';
-        const [rows] = await mysqlPool.query(sql, params);
-        res.json(rows);
+        const [mysqlRows] = await mysqlPool.query(sql, params);
+
+        // Fetch Employee requests from MongoDB
+        const mongoQuery = {};
+        if (route_id) mongoQuery.route_id = route_id;
+        if (status) mongoQuery.status = status;
+        if (bus_id !== undefined) {
+            if (bus_id === '' || bus_id === 'unassigned') {
+                mongoQuery.bus_id = null;
+            } else {
+                mongoQuery.bus_id = bus_id;
+            }
+        }
+        if (search) {
+            mongoQuery.$or = [
+                { employee_name: { $regex: search, $options: 'i' } },
+                { emp_no: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        let mongoRows = [];
+        // Employee requests don't have a course, if course filter is set, employees are typically excluded 
+        // unless course exactly matches "Employee"
+        if (!course || course === 'Employee') {
+            const rawMongoRows = await EmployeeTransportRequest.find(mongoQuery).lean();
+            mongoRows = rawMongoRows.map(r => ({
+                id: r._id.toString(),
+                admission_number: r.emp_no,
+                student_name: r.employee_name,
+                route_id: r.route_id ? r.route_id.toString() : null,
+                route_name: r.route_name,
+                stage_name: r.stage_name,
+                fare: r.fare,
+                status: r.status,
+                bus_id: r.bus_id,
+                request_date: r.request_date || r.created_at,
+                raised_by: r.raised_by,
+                raised_by_id: r.raised_by_id,
+                user_type: 'employee',
+                course: 'Employee'
+            }));
+        }
+
+        const combined = [...mysqlRows.map(r => ({ ...r, user_type: 'student' })), ...mongoRows];
+        combined.sort((a, b) => new Date(b.request_date) - new Date(a.request_date));
+
+        res.json(combined);
     } catch (error) {
         console.error('Error fetching transport requests:', error);
         res.status(500).json({ message: error.message });
@@ -179,10 +260,29 @@ const getTransportRequests = async (req, res) => {
 const updateTransportRequest = async (req, res) => {
     const requestId = req.params.id;
     const { bus_id } = req.body || {};
-    if (!mysqlPool) {
-        return res.status(500).json({ message: 'MySQL connection not established' });
-    }
     try {
+        if (isMongoId(requestId)) {
+            const reqRow = await EmployeeTransportRequest.findById(requestId);
+            if (!reqRow) return res.status(404).json({ message: 'Request not found' });
+            reqRow.bus_id = bus_id || null;
+            await reqRow.save();
+            return res.json({
+                id: reqRow._id.toString(),
+                admission_number: reqRow.emp_no,
+                student_name: reqRow.employee_name,
+                route_id: reqRow.route_id ? reqRow.route_id.toString() : null,
+                route_name: reqRow.route_name,
+                stage_name: reqRow.stage_name,
+                fare: reqRow.fare,
+                status: reqRow.status,
+                bus_id: reqRow.bus_id,
+                user_type: 'employee'
+            });
+        }
+
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
         const [rows] = await mysqlPool.query('SELECT id FROM transport_requests WHERE id = ?', [requestId]);
         if (!rows[0]) {
             return res.status(404).json({ message: 'Transport request not found' });
@@ -203,11 +303,30 @@ const approveTransportRequest = async (req, res) => {
     const requestId = req.params.id;
     const { academicYear } = req.body || {};
 
-    if (!mysqlPool) {
-        return res.status(500).json({ message: 'MySQL connection not established' });
-    }
-
     try {
+        if (isMongoId(requestId)) {
+            const reqRow = await EmployeeTransportRequest.findById(requestId);
+            if (!reqRow) return res.status(404).json({ message: 'Transport request not found' });
+            if (reqRow.status === 'approved') return res.status(400).json({ message: 'Request is already approved' });
+            if (reqRow.status === 'rejected') return res.status(400).json({ message: 'Request was rejected and cannot be approved' });
+            
+            reqRow.status = 'approved';
+            if (req.body.bus_id) {
+                reqRow.bus_id = req.body.bus_id;
+            }
+            await reqRow.save();
+            return res.json({
+                message: 'Employee transport request approved. No fee created.',
+                requestId: String(reqRow._id),
+                amount: 0,
+                expiry_date: null
+            });
+        }
+
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
         const [rows] = await mysqlPool.query(
             'SELECT * FROM transport_requests WHERE id = ?',
             [requestId]
@@ -311,7 +430,16 @@ const approveTransportRequest = async (req, res) => {
                     semester_number: lastSem.semester_number,
                 });
             }
-            await mysqlPool.query('UPDATE transport_requests SET status = ? WHERE id = ?', ['approved', requestId]);
+            let updateQuery = 'UPDATE transport_requests SET status = ?';
+            let updateParams = ['approved'];
+            if (req.body.bus_id) {
+                updateQuery += ', bus_id = ?';
+                updateParams.push(req.body.bus_id);
+            }
+            updateQuery += ' WHERE id = ?';
+            updateParams.push(requestId);
+            await mysqlPool.query(updateQuery, updateParams);
+
             return res.json({
                 message: 'Request approved. Transport fee for this student/year already exists in Fee Management.',
                 requestId: Number(requestId),
@@ -343,7 +471,15 @@ const approveTransportRequest = async (req, res) => {
                 semester_number: lastSem.semester_number,
             });
         }
-        await mysqlPool.query('UPDATE transport_requests SET status = ? WHERE id = ?', ['approved', requestId]);
+        let updateQuery = 'UPDATE transport_requests SET status = ?';
+        let updateParams = ['approved'];
+        if (req.body.bus_id) {
+            updateQuery += ', bus_id = ?';
+            updateParams.push(req.body.bus_id);
+        }
+        updateQuery += ' WHERE id = ?';
+        updateParams.push(requestId);
+        await mysqlPool.query(updateQuery, updateParams);
 
         res.json({
             message: 'Transport request approved and Transport Fee (TRN01) created in Fee Management.',
@@ -364,11 +500,26 @@ const approveTransportRequest = async (req, res) => {
 const rejectTransportRequest = async (req, res) => {
     const requestId = req.params.id;
 
-    if (!mysqlPool) {
-        return res.status(500).json({ message: 'MySQL connection not established' });
-    }
-
     try {
+        if (isMongoId(requestId)) {
+            const reqRow = await EmployeeTransportRequest.findById(requestId);
+            if (!reqRow) return res.status(404).json({ message: 'Transport request not found' });
+            if (reqRow.status === 'rejected') {
+                return res.json({ message: 'Request was already rejected.', requestId: String(requestId) });
+            }
+            if (reqRow.status === 'approved') {
+                return res.status(400).json({ message: 'Cannot reject an approved request.' });
+            }
+
+            reqRow.status = 'rejected';
+            await reqRow.save();
+            return res.json({ message: 'Transport request rejected.', requestId: String(requestId) });
+        }
+
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
         const [rows] = await mysqlPool.query('SELECT id, status FROM transport_requests WHERE id = ?', [requestId]);
         const request = rows[0];
         if (!request) {
@@ -448,14 +599,41 @@ const createTransportRequest = async (req, res) => {
         stage_name,
         fare,
         raised_by = 'student',
-        raised_by_id = null
+        raised_by_id = null,
+        user_type = 'student'
     } = req.body;
 
-    if (!mysqlPool) {
-        return res.status(500).json({ message: 'MySQL connection not established' });
-    }
-
     try {
+        if (user_type === 'employee') {
+            const newReq = new EmployeeTransportRequest({
+                emp_no: admission_number,
+                employee_name: student_name,
+                route_id,
+                route_name,
+                stage_name,
+                fare: 0,
+                status: 'pending',
+                raised_by,
+                raised_by_id
+            });
+            await newReq.save();
+            return res.status(201).json({
+                id: newReq._id.toString(),
+                admission_number: newReq.emp_no,
+                student_name: newReq.employee_name,
+                route_id: newReq.route_id ? newReq.route_id.toString() : null,
+                route_name: newReq.route_name,
+                stage_name: newReq.stage_name,
+                fare: newReq.fare,
+                status: newReq.status,
+                user_type: 'employee',
+                request_date: newReq.created_at
+            });
+        }
+
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
         // Fetch student's current year if not provided
         let yearOfStudy = 1;
         if (admission_number) {
@@ -498,41 +676,99 @@ const createTransportRequest = async (req, res) => {
 // @access  Private/Admin
 const getDashboardStats = async (req, res) => {
     try {
-        if (!mysqlPool) {
-            return res.status(500).json({ message: 'MySQL connection not established' });
+        let totalPassengers = 0;
+        let routeBreakdown = [];
+        let stageBreakdown = [];
+        let courseBreakdown = [];
+
+        if (mysqlPool) {
+            // 1. Total Approved Passengers
+            const [totalRows] = await mysqlPool.query(
+                "SELECT COUNT(*) as total FROM transport_requests WHERE status = 'approved'"
+            );
+            totalPassengers += totalRows[0].total;
+
+            // 2. Route-wise Passenger Counts
+            const [routeRows] = await mysqlPool.query(
+                "SELECT route_id, route_name, COUNT(*) as count FROM transport_requests WHERE status = 'approved' GROUP BY route_id, route_name"
+            );
+            routeBreakdown = routeRows;
+
+            // 3. Stage-wise Passenger Counts
+            const [stageRows] = await mysqlPool.query(
+                "SELECT route_id, route_name, stage_name, COUNT(*) as count FROM transport_requests WHERE status = 'approved' GROUP BY route_id, route_name, stage_name"
+            );
+            stageBreakdown = stageRows;
+
+            // 4. Course-wise Passenger Counts
+            const [courseRows] = await mysqlPool.query(
+                `SELECT s.course, COUNT(tr.id) as count 
+                 FROM transport_requests tr 
+                 JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)
+                 WHERE tr.status = 'approved' 
+                 GROUP BY s.course`
+            );
+            courseBreakdown = courseRows;
         }
 
-        // 1. Total Approved Passengers
-        const [totalRows] = await mysqlPool.query(
-            "SELECT COUNT(*) as total FROM transport_requests WHERE status = 'approved'"
-        );
-        const totalPassengers = totalRows[0].total;
+        // Add MongoDB (Employee) Stats
+        const mongoTotal = await EmployeeTransportRequest.countDocuments({ status: 'approved' });
+        totalPassengers += mongoTotal;
 
-        // 2. Route-wise Passenger Counts
-        const [routeRows] = await mysqlPool.query(
-            "SELECT route_id, route_name, COUNT(*) as count FROM transport_requests WHERE status = 'approved' GROUP BY route_id, route_name ORDER BY count DESC"
-        );
+        const mongoRouteRows = await EmployeeTransportRequest.aggregate([
+            { $match: { status: 'approved' } },
+            { $group: { _id: { route_id: '$route_id', route_name: '$route_name' }, count: { $sum: 1 } } }
+        ]);
+        
+        mongoRouteRows.forEach(mr => {
+            const existing = routeBreakdown.find(r => String(r.route_id) === String(mr._id.route_id));
+            if (existing) {
+                existing.count += mr.count;
+            } else {
+                routeBreakdown.push({
+                    route_id: mr._id.route_id,
+                    route_name: mr._id.route_name,
+                    count: mr.count
+                });
+            }
+        });
 
-        // 3. Stage-wise Passenger Counts
-        const [stageRows] = await mysqlPool.query(
-            "SELECT route_id, route_name, stage_name, COUNT(*) as count FROM transport_requests WHERE status = 'approved' GROUP BY route_id, route_name, stage_name ORDER BY count DESC"
-        );
+        const mongoStageRows = await EmployeeTransportRequest.aggregate([
+            { $match: { status: 'approved' } },
+            { $group: { _id: { route_id: '$route_id', route_name: '$route_name', stage_name: '$stage_name' }, count: { $sum: 1 } } }
+        ]);
 
-        // 4. Course-wise Passenger Counts
-        const [courseRows] = await mysqlPool.query(
-            `SELECT s.course, COUNT(tr.id) as count 
-             FROM transport_requests tr 
-             JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)
-             WHERE tr.status = 'approved' 
-             GROUP BY s.course 
-             ORDER BY count DESC`
-        );
+        mongoStageRows.forEach(ms => {
+            const existing = stageBreakdown.find(s => String(s.route_id) === String(ms._id.route_id) && s.stage_name === ms._id.stage_name);
+            if (existing) {
+                existing.count += ms.count;
+            } else {
+                stageBreakdown.push({
+                    route_id: ms._id.route_id,
+                    route_name: ms._id.route_name,
+                    stage_name: ms._id.stage_name,
+                    count: ms.count
+                });
+            }
+        });
+
+        if (mongoTotal > 0) {
+            courseBreakdown.push({
+                course: 'Employee',
+                count: mongoTotal
+            });
+        }
+
+        // Sort descending
+        routeBreakdown.sort((a, b) => b.count - a.count);
+        stageBreakdown.sort((a, b) => b.count - a.count);
+        courseBreakdown.sort((a, b) => b.count - a.count);
 
         res.json({
             totalPassengers,
-            routeBreakdown: routeRows,
-            stageBreakdown: stageRows,
-            courseBreakdown: courseRows
+            routeBreakdown,
+            stageBreakdown,
+            courseBreakdown
         });
     } catch (error) {
         console.error('Error fetching dashboard stats:', error);

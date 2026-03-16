@@ -14,15 +14,15 @@ const searchStudents = async (req, res) => {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
 
-        // Search by name or admission number
+        // Search by name, admission number, or PIN number
         const sql = `
-            SELECT id, admission_number, admission_no, student_name, course, branch, current_year, current_semester, stud_type
+            SELECT id, admission_number, admission_no, pin_no, student_name, course, branch, current_year, current_semester, stud_type
             FROM students
-            WHERE student_name LIKE ? OR admission_number LIKE ? OR admission_no LIKE ?
+            WHERE student_name LIKE ? OR admission_number LIKE ? OR admission_no LIKE ? OR pin_no LIKE ?
             LIMIT 50
         `;
         const searchTerm = `%${q}%`;
-        const [rows] = await mysqlPool.query(sql, [searchTerm, searchTerm, searchTerm]);
+        const [rows] = await mysqlPool.query(sql, [searchTerm, searchTerm, searchTerm, searchTerm]);
 
         res.json(rows);
     } catch (error) {

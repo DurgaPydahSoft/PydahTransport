@@ -76,4 +76,41 @@ const getCleaners = async (req, res) => {
     }
 };
 
-module.exports = { getDrivers, getCleaners };
+// @desc    Search employees from HRMS
+// @route   GET /api/employees/search
+// @access  Private/Admin
+const searchEmployees = async (req, res) => {
+    const { q } = req.query;
+    if (!q) {
+        return res.status(400).json({ message: 'Search query is required' });
+    }
+
+    try {
+        const conn = getEmployeeConnection();
+        if (!conn) {
+            return res.status(503).json({ message: 'Employee DB connection not available' });
+        }
+
+        const employeesCollection = conn.collection('employees');
+        const searchRegex = new RegExp(q, 'i');
+        const employees = await employeesCollection.find({
+            $or: [
+                { employee_name: { $regex: searchRegex } },
+                { emp_no: { $regex: searchRegex } }
+            ],
+            is_active: true
+        }).project({
+            emp_no: 1,
+            employee_name: 1,
+            phone_number: 1,
+            email: 1
+        }).limit(20).toArray();
+
+        res.json(employees);
+    } catch (error) {
+        console.error('Error searching employees:', error);
+        res.status(500).json({ message: 'Failed to search employees' });
+    }
+};
+
+module.exports = { getDrivers, getCleaners, searchEmployees };

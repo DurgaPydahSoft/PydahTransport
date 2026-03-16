@@ -1,6 +1,7 @@
 const Bus = require('../models/Bus');
 const Route = require('../models/Route');
 const { mysqlPool } = require('../config/db');
+const EmployeeTransportRequest = require('../models/EmployeeTransportRequest');
 
 // @desc    Get bus details with assigned route, passenger list, seats filled
 // @route   GET /api/buses/:id/details
@@ -15,14 +16,29 @@ const getBusDetails = async (req, res) => {
         if (bus.assignedRouteId) {
             route = await Route.findOne({ routeId: bus.assignedRouteId });
         }
-        let passengers = [];
+        let mysqlPassengers = [];
         if (mysqlPool) {
             const [rows] = await mysqlPool.query(
                 "SELECT id, admission_number, student_name, route_name, stage_name, fare, request_date FROM transport_requests WHERE bus_id = ? AND status = 'approved' ORDER BY stage_name, student_name",
                 [bus.busNumber]
             );
-            passengers = rows;
+            mysqlPassengers = rows.map(r => ({ ...r, user_type: 'student' }));
         }
+
+        const mongoRequests = await EmployeeTransportRequest.find({ bus_id: bus.busNumber, status: 'approved' }).lean();
+        const mongoPassengers = mongoRequests.map(r => ({
+            id: r._id.toString(),
+            admission_number: r.emp_no,
+            student_name: r.employee_name,
+            route_name: r.route_name,
+            stage_name: r.stage_name,
+            fare: r.fare,
+            request_date: r.request_date || r.created_at,
+            user_type: 'employee'
+        }));
+
+        const passengers = [...mysqlPassengers, ...mongoPassengers];
+        passengers.sort((a, b) => a.stage_name.localeCompare(b.stage_name) || a.student_name.localeCompare(b.student_name));
         const capacity = bus.capacity || 0;
         const seatsFilled = passengers.length;
         const seatsAvailable = Math.max(0, capacity - seatsFilled);
@@ -79,7 +95,17 @@ const getBusesOverview = async (req, res) => {
                 `SELECT bus_id AS busNumber, COUNT(*) AS seatsFilled FROM transport_requests WHERE status = 'approved' AND bus_id IN (${placeholders}) GROUP BY bus_id`,
                 busNumbers
             );
-            counts = Object.fromEntries((rows || []).map((r) => [r.busNumber, Number(r.seatsFilled)]));
+            const mysqlCounts = Object.fromEntries((rows || []).map((r) => [r.busNumber, Number(r.seatsFilled)]));
+            
+            const mongoCountsRaw = await EmployeeTransportRequest.aggregate([
+                { $match: { status: 'approved', bus_id: { $in: busNumbers } } },
+                { $group: { _id: '$bus_id', count: { $sum: 1 } } }
+            ]);
+            const mongoCounts = Object.fromEntries(mongoCountsRaw.map(r => [r._id, r.count]));
+
+            busNumbers.forEach(bn => {
+                counts[bn] = (mysqlCounts[bn] || 0) + (mongoCounts[bn] || 0);
+            });
         }
 
         const list = buses.map((bus) => {
