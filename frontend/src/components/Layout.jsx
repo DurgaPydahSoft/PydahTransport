@@ -51,10 +51,10 @@ const Layout = ({ children }) => {
     const allMenuItems = [
         { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, permission: 'dashboard' },
         { path: '/buses', label: 'Bus Management', permission: 'bus_management', icon: <Bus size={20} /> },
-        { path: '/fleet', label: 'Fleet & Passengers', permission: 'fleet_passengers', icon: <Users size={20} /> },
         { path: '/routes', label: 'Route Management', permission: 'route_management', icon: <Map size={20} /> },
-        { path: '/inventory', label: 'Inventory', icon: <Package size={20} />, permission: 'inventory' },
-        { path: '/transport-requests', label: 'Requests', permission: 'transport_requests', icon: <ClipboardList size={20} /> },
+        { path: '/fleet', label: 'Fleet & Passengers', permission: 'fleet_passengers', icon: <Users size={20} /> },
+        { path: '/inventory', label: 'Inventory Items', icon: <Package size={20} />, permission: 'inventory' },
+        { path: '/transport-requests', label: 'Passenger Requests', permission: 'transport_requests', icon: <ClipboardList size={20} /> },
         { path: '/raise-request', label: 'Raise Request', permission: 'raise_request', icon: <PlusCircle size={20} /> },
         { path: '/concessions', label: 'Concessions', permission: 'concessions', icon: <Percent size={20} /> },
         { path: '/transport-dues', label: 'Transport Dues', permission: 'transport_dues', icon: <CreditCard size={20} /> },
@@ -84,7 +84,7 @@ const Layout = ({ children }) => {
                         />
                         {!isCollapsed && (
                             <h1 className="text-xl font-bold text-blue-900 tracking-tight whitespace-nowrap animate-in fade-in slide-in-from-left-2">
-                                 TRANSPORT
+                                TRANSPORT
                             </h1>
                         )}
                     </div>
