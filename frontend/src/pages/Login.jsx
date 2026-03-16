@@ -80,14 +80,14 @@ const Login = () => {
 
     return (
         <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4 relative overflow-hidden font-inter">
-            {/* Background Image */}
-            <div className="absolute inset-0 z-0">
+            {/* Background Layer - Brand Consistency */}
+            <div className="absolute inset-0 z-0 bg-slate-950">
                 <img
-                    src="https://images.unsplash.com/photo-1570125909232-eb263c188f7e?q=80&w=2071&auto=format&fit=crop"
-                    alt="Bus Background"
-                    className="w-full h-full object-cover opacity-20"
+                    src="/BUS-Background-PYDAH-GROUP.png"
+                    alt="Pydah Transport Background"
+                    className="w-full h-full object-cover opacity-80"
                 />
-                <div className="absolute inset-0 bg-slate-900 opacity-70"></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/30 to-transparent"></div>
             </div>
 
             <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md relative z-10 border border-slate-200">

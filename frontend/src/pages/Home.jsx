@@ -1,67 +1,99 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Bus, Map } from 'lucide-react';
+import { 
+    Bus, 
+    Map, 
+    ShieldCheck, 
+    ArrowRight, 
+    GraduationCap, 
+    Activity, 
+    Users, 
+    Clock,
+    CheckCircle2
+} from 'lucide-react';
 
 const Home = () => {
     return (
-        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center relative overflow-hidden font-inter">
-            {/* Background Image */}
-            <div className="absolute inset-0 z-0">
+        <div className="min-h-screen bg-[#060b1a] flex flex-col relative overflow-hidden font-outfit">
+            {/* Background Layer - High Visibility */}
+            <div className="absolute inset-0 z-0 bg-slate-950">
                 <img
-                    src="https://images.unsplash.com/photo-1570125909232-eb263c188f7e?q=80&w=2071&auto=format&fit=crop"
-                    alt="Bus Background"
-                    className="w-full h-full object-cover opacity-20"
+                    src="/BUS-Background-PYDAH-GROUP.png"
+                    alt="Pydah Transport Background"
+                    className="w-full h-full object-cover opacity-80"
                 />
-                <div className="absolute inset-0 bg-slate-900 opacity-70"></div>
+                {/* Sharper Left Gradient for Text Contrast, Clearer Right Side */}
+                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/30 to-transparent"></div>
             </div>
 
-            {/* Main Content Container - Centered Vertically */}
-            <div className="flex-grow flex flex-col items-center justify-center w-full relative z-10 px-4 py-8">
-                <header className="mb-8 text-center max-w-3xl">
-                    <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4 tracking-tight drop-shadow-lg">
-                        Pydah Transport
-                    </h1>
-                    <p className="text-lg text-slate-200 leading-relaxed font-light drop-shadow-md">
-                        Streamlining transportation for the next generation of educational excellence.
-                    </p>
-                </header>
+            {/* Header / Logo Section */}
+            <nav className="relative z-10 px-6 py-6 md:px-12 flex items-center justify-between animate-in fade-in slide-in-from-top-4 duration-700">
+                <div className="flex items-center gap-3">
+                    <div className="bg-white p-1.5 rounded-xl shadow-lg h-11 w-11 flex items-center justify-center">
+                        <img
+                            src="/Gemini_Generated_Image_uu0hhduu0hhduu0h.png"
+                            alt="Logo"
+                            className="h-8 w-8 object-contain"
+                        />
+                    </div>
+                    <div className="flex flex-col justify-center">
+                        <span className="text-white font-black text-xl tracking-tighter uppercase leading-none">Pydah</span>
+                        <span className="text-blue-500 font-bold text-[10px] uppercase tracking-widest leading-none mt-1">Transport</span>
+                    </div>
+                </div>
+            </nav>
 
-                <main className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full">
-                    {/* Student Portal Card */}
-                    <div className="bg-white p-6 rounded-2xl shadow-2xl hover:shadow-xl transition-all duration-300 border border-slate-200 flex flex-col items-center text-center group hover:-translate-y-1">
-                        <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors shadow-inner">
-                            <Bus className="w-6 h-6 text-blue-600 transform group-hover:scale-110 transition-transform duration-300" />
+            <main className="flex-1 relative z-10 flex flex-col items-center lg:items-start justify-center px-6 md:px-12 lg:px-24">
+                <div className="max-w-4xl space-y-8 animate-in fade-in slide-in-from-left-12 duration-1000">
+                    <div className="space-y-4">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full">
+                            <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500"></span>
+                            </span>
+                            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Student Management</span>
                         </div>
-                        <h2 className="text-xl font-bold text-slate-800 mb-2">Student & Staff Portal</h2>
-                        <p className="text-slate-600 mb-6 flex-1 text-sm">
-                            Access real-time bus schedules, check route fares, and apply for your transport pass seamlessly.
+                        
+                        <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-white leading-[0.9] tracking-tighter">
+                            SMART <br />
+                            <span className="shimmer-text-blue">TRANSPORT</span> <br />
+                            SYSTEMS.
+                        </h1>
+                        
+                        <p className="max-w-xl text-lg md:text-xl text-slate-300 font-medium leading-relaxed">
+                            An advanced student transportation management system designed for Pydah's educational network. Ensure safe, efficient, and precise transit for every student.
                         </p>
-                        <button className="bg-slate-100 text-slate-400 px-6 py-2.5 rounded-lg font-medium cursor-not-allowed w-full text-sm border border-slate-200" disabled>
-                            Portal Coming Soon
-                        </button>
                     </div>
 
-                    {/* Admin Portal Card */}
-                    <div className="bg-white p-6 rounded-2xl shadow-2xl hover:shadow-xl transition-all duration-300 border border-slate-200 flex flex-col items-center text-center group hover:-translate-y-1">
-                        <div className="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center mb-4 group-hover:bg-indigo-200 transition-colors shadow-inner">
-                            <Map className="w-6 h-6 text-indigo-600 transform group-hover:scale-110 transition-transform duration-300" />
-                        </div>
-                        <h2 className="text-xl font-bold text-slate-800 mb-2">Administrative Control</h2>
-                        <p className="text-slate-600 mb-6 flex-1 text-sm">
-                            Comprehensive management of fleets, routes, stages, and fee approvals for transport managers.
-                        </p>
-                        <Link to="/login" className="inline-block bg-slate-900 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-slate-800 hover:shadow-lg transition-all w-full transform active:scale-95 text-sm">
-                            Admin Login
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <Link 
+                            to="/login" 
+                            className="group flex items-center justify-center gap-4 bg-white hover:bg-slate-100 text-slate-950 px-8 py-5 rounded-2xl font-black transition-all hover:shadow-[0_20px_40px_rgba(255,255,255,0.1)] hover:-translate-y-1 active:scale-[0.98] tracking-widest uppercase"
+                        >
+                            Access Dashboard
+                            <div className="bg-blue-600 p-1 rounded-lg text-white">
+                                <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                            </div>
                         </Link>
+                        
                     </div>
-                </main>
-            </div>
+                </div>
+            </main>
 
-            <footer className="py-6 text-slate-400 text-xs relative z-10 font-medium text-center">
-                &copy; {new Date().getFullYear()} Pydah Educational Institutions. All rights reserved.
+            {/* Refined Footer */}
+            <footer className="relative z-10 py-10 px-6 md:px-12 animate-in fade-in duration-1000 delay-700">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-t border-white/10 pt-8">
+                    <p className="text-slate-500 text-[11px] font-bold tracking-widest uppercase">
+                        © {new Date().getFullYear()} Pydah Educational Institutions
+                    </p>
+                    <div className="flex items-center gap-6">
+                        <span className="text-slate-600 text-[10px] font-black uppercase tracking-widest">Logistics Control Center</span>
+                    </div>
+                </div>
             </footer>
         </div>
     );
 };
+
 
 export default Home;
