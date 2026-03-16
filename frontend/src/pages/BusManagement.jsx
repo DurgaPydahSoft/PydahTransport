@@ -316,14 +316,9 @@ const BusManagement = () => {
                                     {buses.map((bus) => (
                                         <tr key={bus._id} className="hover:bg-blue-50/30 transition-colors">
                                             <td className="p-4">
-                                                <div className="flex items-center">
-                                                    <div className="bg-blue-100 p-2 rounded-lg text-blue-600 mr-3">
-                                                        <Bus size={20} />
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-bold text-slate-800">{bus.busNumber}</p>
-                                                        <p className="text-xs text-slate-500">{bus.type}</p>
-                                                    </div>
+                                                <div>
+                                                    <p className="font-bold text-slate-800">{bus.busNumber}</p>
+                                                    <p className="text-xs text-slate-500">{bus.type}</p>
                                                 </div>
                                             </td>
                                             <td className="p-4 text-slate-600 font-medium">{bus.capacity} seats</td>
@@ -456,14 +451,9 @@ const BusManagement = () => {
                                                 className="hover:bg-blue-50/30 transition-colors cursor-pointer group"
                                             >
                                                 <td className="px-4 py-3">
-                                                    <div className="flex items-center">
-                                                        <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600 mr-3 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
-                                                            <Bus size={18} />
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-bold text-slate-800 text-sm">{bus.busNumber}</p>
-                                                            <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{bus.type}</p>
-                                                        </div>
+                                                    <div>
+                                                        <p className="font-bold text-slate-800 text-sm">{bus.busNumber}</p>
+                                                        <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{bus.type}</p>
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-slate-600 font-medium">
@@ -530,14 +520,9 @@ const BusManagement = () => {
                                 >
                                     <div className="p-4 flex-1">
                                         <div className="flex justify-between items-start mb-3">
-                                            <div className="flex items-center">
-                                                <div className="bg-blue-50 p-2 rounded-lg text-blue-600 mr-3 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
-                                                    <Bus size={20} />
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-base font-bold text-slate-900 leading-tight">{bus.busNumber}</h3>
-                                                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mt-0.5">{bus.type}</p>
-                                                </div>
+                                            <div>
+                                                <h3 className="text-base font-bold text-slate-900 leading-tight">{bus.busNumber}</h3>
+                                                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide mt-0.5">{bus.type}</p>
                                             </div>
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${bus.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
                                                 bus.status === 'In Maintenance' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-red-50 text-red-700 border-red-100'

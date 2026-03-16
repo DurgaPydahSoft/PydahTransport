@@ -165,14 +165,9 @@ const Fleet = () => {
                                 {list.map((item) => (
                                     <tr key={item.bus._id} className="hover:bg-blue-50/30 transition-colors group">
                                         <td className="px-4 py-2">
-                                            <div className="flex items-center">
-                                                <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600 mr-3 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
-                                                    <Bus size={16} />
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-slate-800 text-sm">{item.bus.busNumber}</p>
-                                                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{item.bus.type}</p>
-                                                </div>
+                                            <div>
+                                                <p className="font-bold text-slate-800 text-sm">{item.bus.busNumber}</p>
+                                                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{item.bus.type}</p>
                                             </div>
                                         </td>
                                         <td className="px-4 py-2">
