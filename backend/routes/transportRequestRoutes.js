@@ -12,7 +12,8 @@ const {
     updateConcession,
     deleteConcession,
     getApprovedPassengers,
-    submitRouteChangeRequest
+    submitRouteChangeRequest,
+    getPassengerFullDetails
 } = require('../controllers/transportRequestController');
 
 router.get('/', getTransportRequests);
@@ -23,6 +24,7 @@ router.get('/concessions', getConcessions);
 router.get('/stats', getDashboardStats);
 router.patch('/:id/concession', updateConcession);
 router.get('/:id/semester-options', getSemesterOptions);
+router.get('/:id/full-details', getPassengerFullDetails);
 router.patch('/:id/approve', approveTransportRequest);
 router.patch('/:id/reject', rejectTransportRequest);
 router.patch('/:id', updateTransportRequest);

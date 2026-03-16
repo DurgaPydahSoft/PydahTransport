@@ -173,8 +173,6 @@ const getTransportRequests = async (req, res) => {
             SELECT tr.*, 
                    COALESCE(s1.course, s2.course) as course,
                    COALESCE(s1.branch, s2.branch) as branch,
-                   COALESCE(s1.student_photo, s2.student_photo) as student_photo,
-                   COALESCE(s1.qr_token, s2.qr_token) as qr_token,
                    COALESCE(s1.pin_no, s2.pin_no) as pin_no
             FROM transport_requests tr 
             LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
@@ -302,6 +300,53 @@ const updateTransportRequest = async (req, res) => {
         res.json(updated[0]);
     } catch (error) {
         console.error('Error updating transport request:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get full details for a passenger (including photo) for bus pass generation
+// @route   GET /api/transport-requests/:id/full-details
+// @access  Private/Admin
+const getPassengerFullDetails = async (req, res) => {
+    const requestId = req.params.id;
+    try {
+        if (isMongoId(requestId)) {
+            const reqRow = await EmployeeTransportRequest.findById(requestId).lean();
+            if (!reqRow) return res.status(404).json({ message: 'Request not found' });
+            return res.json({
+                ...reqRow,
+                id: reqRow._id.toString(),
+                admission_number: reqRow.emp_no,
+                student_name: reqRow.employee_name,
+                user_type: 'employee',
+                course: 'Employee'
+            });
+        }
+
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
+        const [rows] = await mysqlPool.query(
+            `SELECT tr.*, 
+                    COALESCE(s1.course, s2.course) as course,
+                    COALESCE(s1.branch, s2.branch) as branch,
+                    COALESCE(s1.student_photo, s2.student_photo) as student_photo,
+                    COALESCE(s1.pin_no, s2.pin_no) as pin_no
+             FROM transport_requests tr 
+             LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
+             LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
+             WHERE tr.id = ?`,
+            [requestId]
+        );
+
+        if (!rows[0]) {
+            return res.status(404).json({ message: 'Transport request not found' });
+        }
+
+        res.json({ ...rows[0], user_type: 'student' });
+    } catch (error) {
+        console.error('Error fetching passenger full details:', error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -1079,28 +1124,56 @@ const deleteConcession = async (req, res) => {
 // @route   GET /api/transport-requests/approved-passengers
 // @access  Private/Admin
 const getApprovedPassengers = async (req, res) => {
-    const { q } = req.query;
-    if (!mysqlPool) {
-        return res.status(500).json({ message: 'MySQL connection not established' });
-    }
-
+    const { q, user_type } = req.query;
+    
     try {
+        if (user_type === 'employee') {
+            const query = { status: 'approved' };
+            if (q) {
+                query.$or = [
+                    { employee_name: { $regex: q, $options: 'i' } },
+                    { emp_no: { $regex: q, $options: 'i' } }
+                ];
+            }
+            const employees = await EmployeeTransportRequest.find(query).limit(50).lean();
+            return res.json(employees.map(r => ({
+                id: r._id.toString(),
+                admission_number: r.emp_no,
+                student_name: r.employee_name,
+                route_id: r.route_id,
+                route_name: r.route_name,
+                stage_name: r.stage_name,
+                fare: r.fare,
+                user_type: 'employee'
+            })));
+        }
+
+        // Default to Students (MySQL)
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
         let sql = `
-            SELECT id, admission_number, student_name, route_id, route_name, stage_name, fare, year_of_study
-            FROM transport_requests
-            WHERE status = 'approved'
+            SELECT tr.id, tr.admission_number, tr.student_name, tr.route_id, tr.route_name, tr.stage_name, tr.fare, tr.year_of_study,
+                   COALESCE(s1.course, s2.course) as course,
+                   COALESCE(s1.branch, s2.branch) as branch,
+                   COALESCE(s1.pin_no, s2.pin_no) as pin_no
+            FROM transport_requests tr
+            LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
+            LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
+            WHERE tr.status = 'approved'
         `;
         const params = [];
 
         if (q) {
-            sql += ' AND (student_name LIKE ? OR admission_number LIKE ?)';
+            sql += ' AND (tr.student_name LIKE ? OR tr.admission_number LIKE ?)';
             const searchPattern = `%${q}%`;
             params.push(searchPattern, searchPattern);
         }
 
         sql += ' LIMIT 50';
         const [rows] = await mysqlPool.query(sql, params);
-        res.json(rows);
+        res.json(rows.map(r => ({ ...r, user_type: 'student' })));
     } catch (error) {
         console.error('Error fetching approved passengers:', error);
         res.status(500).json({ message: error.message });
@@ -1118,34 +1191,54 @@ const submitRouteChangeRequest = async (req, res) => {
         new_stage_name,
         new_fare,
         admin_id,
-        admin_name
+        admin_name,
+        user_type // Optional, helps distinguish
     } = req.body;
 
-    if (!mysqlPool) {
-        return res.status(500).json({ message: 'MySQL connection not established' });
-    }
-
     try {
-        // 1. Fetch current approved request
-        const [currentRows] = await mysqlPool.query(
-            'SELECT * FROM transport_requests WHERE admission_number = ? AND status = "approved" LIMIT 1',
-            [admission_number]
-        );
-        const currentRequest = currentRows[0];
-        if (!currentRequest) {
-            return res.status(404).json({ message: 'No approved transport request found for this student.' });
+        let currentRequest;
+        let oldFare = 0;
+        let fareDiff = 0;
+
+        if (user_type === 'employee') {
+            currentRequest = await EmployeeTransportRequest.findOne({ emp_no: admission_number, status: 'approved' }).lean();
+            if (!currentRequest) {
+                return res.status(404).json({ message: 'No approved transport request found for this employee.' });
+            }
+            oldFare = currentRequest.fare || 0;
+            fareDiff = new_fare - oldFare;
+
+            // Update MongoDB Record
+            await EmployeeTransportRequest.findByIdAndUpdate(currentRequest._id, {
+                route_id: new_route_id,
+                route_name: new_route_name,
+                stage_name: new_stage_name,
+                fare: new_fare
+            });
+        } else {
+            // Default to Students (MySQL)
+            if (!mysqlPool) {
+                return res.status(500).json({ message: 'MySQL connection not established' });
+            }
+
+            const [currentRows] = await mysqlPool.query(
+                'SELECT * FROM transport_requests WHERE admission_number = ? AND status = "approved" LIMIT 1',
+                [admission_number]
+            );
+            currentRequest = currentRows[0];
+            if (!currentRequest) {
+                return res.status(404).json({ message: 'No approved transport request found for this student.' });
+            }
+
+            oldFare = currentRequest.fare || 0;
+            fareDiff = new_fare - oldFare;
+
+            // Update MySQL Record
+            await mysqlPool.query(
+                'UPDATE transport_requests SET route_id = ?, route_name = ?, stage_name = ?, fare = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                [new_route_id, new_route_name, new_stage_name, new_fare, currentRequest.id]
+            );
         }
-
-        // 2. Calculate Fare Difference
-        const oldFare = currentRequest.fare || 0;
-        const fareDiff = new_fare - oldFare;
-
-        // 3. Update MySQL Record
-        // We update the existing approved request to the new route/stage
-        await mysqlPool.query(
-            'UPDATE transport_requests SET route_id = ?, route_name = ?, stage_name = ?, fare = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-            [new_route_id, new_route_name, new_stage_name, new_fare, currentRequest.id]
-        );
 
         // 4. Update MongoDB Fee if fare exceeds (fareDiff > 0)
         if (fareDiff > 0) {
@@ -1220,5 +1313,6 @@ module.exports = {
     updateConcession,
     deleteConcession,
     getApprovedPassengers,
-    submitRouteChangeRequest
+    submitRouteChangeRequest,
+    getPassengerFullDetails
 };

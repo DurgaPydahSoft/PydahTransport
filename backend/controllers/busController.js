@@ -22,8 +22,6 @@ const getBusDetails = async (req, res) => {
                 `SELECT tr.id, tr.admission_number, tr.student_name, tr.route_name, tr.stage_name, tr.fare, tr.request_date, tr.bus_id,
                         COALESCE(s1.course, s2.course) as course,
                         COALESCE(s1.branch, s2.branch) as branch,
-                        COALESCE(s1.student_photo, s2.student_photo) as student_photo,
-                        COALESCE(s1.qr_token, s2.qr_token) as qr_token,
                         COALESCE(s1.pin_no, s2.pin_no) as pin_no
                  FROM transport_requests tr
                  LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 

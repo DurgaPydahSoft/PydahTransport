@@ -60,7 +60,7 @@ const AdminRaiseRequest = () => {
         try {
             const endpoint = activeTab === 'new' 
                 ? (userType === 'employee' ? `${API_BASE}/employees/search?q=${encodeURIComponent(searchQuery)}` : `${API_BASE}/students/search?q=${encodeURIComponent(searchQuery)}`)
-                : `${API_BASE}/transport-requests/approved-passengers?q=${encodeURIComponent(searchQuery)}`;
+                : `${API_BASE}/transport-requests/approved-passengers?q=${encodeURIComponent(searchQuery)}&user_type=${userType}`;
             
             const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
             const response = await fetch(endpoint, {
@@ -125,7 +125,8 @@ const AdminRaiseRequest = () => {
                 new_stage_name: selectedStage.stageName,
                 new_fare: selectedStage.fare,
                 admin_name: admin.name,
-                admin_id: admin.id
+                admin_id: admin.id,
+                user_type: userType
             } : {
                 admission_number: selectedStudent.admission_number || selectedStudent.admission_no || selectedStudent.emp_no,
                 student_name: selectedStudent.student_name || selectedStudent.employee_name,
@@ -208,32 +209,32 @@ const AdminRaiseRequest = () => {
                             <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">1</span>
                             {activeTab === 'new' ? 'Select Passenger' : 'Find Passenger'}
                         </div>
-                        {activeTab === 'new' && (
-                            <div className="bg-slate-100 p-1 rounded-lg flex text-xs">
-                                <button
-                                    onClick={() => {
-                                        setUserType('student');
-                                        setStudents([]);
-                                        setSelectedStudent(null);
-                                        setSearchQuery('');
-                                    }}
-                                    className={`px-3 py-1.5 rounded-md font-bold transition-all ${userType === 'student' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    Student
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setUserType('employee');
-                                        setStudents([]);
-                                        setSelectedStudent(null);
-                                        setSearchQuery('');
-                                    }}
-                                    className={`px-3 py-1.5 rounded-md font-bold transition-all ${userType === 'employee' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    Employee
-                                </button>
-                            </div>
-                        )}
+                        <div className="bg-slate-100 p-1 rounded-lg flex text-xs">
+                            <button
+                                onClick={() => {
+                                    setUserType('student');
+                                    setStudents([]);
+                                    setApprovedStudents([]);
+                                    setSelectedStudent(null);
+                                    setSearchQuery('');
+                                }}
+                                className={`px-3 py-1.5 rounded-md font-bold transition-all ${userType === 'student' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Student
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setUserType('employee');
+                                    setStudents([]);
+                                    setApprovedStudents([]);
+                                    setSelectedStudent(null);
+                                    setSearchQuery('');
+                                }}
+                                className={`px-3 py-1.5 rounded-md font-bold transition-all ${userType === 'employee' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Employee
+                            </button>
+                        </div>
                     </h3>
                     <div className="flex gap-2 mb-6 relative">
                         <div className="flex-1 relative">

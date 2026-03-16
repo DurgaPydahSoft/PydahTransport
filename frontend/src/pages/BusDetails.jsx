@@ -18,6 +18,7 @@ const BusDetails = () => {
     const [unassignedPassengers, setUnassignedPassengers] = useState([]);
     const [assignLoading, setAssignLoading] = useState(false);
     const [selectedIds, setSelectedIds] = useState(new Set());
+    const [fetchingPass, setFetchingPass] = useState(false);
 
     const componentRef = useRef();
     const handlePrint = useReactToPrint({
@@ -29,8 +30,28 @@ const BusDetails = () => {
     const passCardRef = useRef();
     const handlePrintPass = useReactToPrint({
         contentRef: passCardRef,
-        documentTitle: selectedPassPassenger ? `Bus-Pass-${selectedPassPassenger.admission_number || selectedPassPassenger.emp_no}` : 'Bus-Pass'
+        documentTitle: selectedPassPassenger ? `Bus-Pass-${selectedPassPassenger.admission_number || selectedPassPassenger.emp_no || selectedPassPassenger.admission_no || selectedPassPassenger.empNo}` : 'Bus-Pass'
     });
+
+    const handlePrintPassClick = async (p) => {
+        if (fetchingPass) return;
+        setFetchingPass(true);
+        try {
+            const response = await fetch(`${API}/transport-requests/${p.id}/full-details`);
+            if (response.ok) {
+                const fullPassenger = await response.json();
+                setSelectedPassPassenger(fullPassenger);
+                setTimeout(() => handlePrintPass(), 150);
+            } else {
+                alert("Failed to fetch full passenger details for printing.");
+            }
+        } catch (error) {
+            console.error("Error fetching pass details:", error);
+            alert("Error preparing bus pass.");
+        } finally {
+            setFetchingPass(false);
+        }
+    };
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -278,11 +299,9 @@ const BusDetails = () => {
                                         <td className="p-4 text-right">
                                             <button
                                                 type="button"
-                                                onClick={() => {
-                                                    setSelectedPassPassenger(p);
-                                                    setTimeout(() => handlePrintPass(), 100);
-                                                }}
-                                                className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all hover:scale-110"
+                                                disabled={fetchingPass}
+                                                onClick={() => handlePrintPassClick(p)}
+                                                className={`p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all hover:scale-110 ${fetchingPass ? 'animate-pulse opacity-50' : ''}`}
                                                 title="Print Bus Pass"
                                             >
                                                 <CreditCard size={18} />
