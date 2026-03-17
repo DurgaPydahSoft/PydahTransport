@@ -155,8 +155,9 @@ const Fleet = () => {
                                 <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase text-slate-500 font-bold tracking-wider">
                                     <th className="px-4 py-2.5 w-48">Bus Details</th>
                                     <th className="px-4 py-2.5">Route</th>
-                                    <th className="px-4 py-2.5">Seats Filled</th>
                                     <th className="px-4 py-2.5">Capacity</th>
+                                    <th className="px-4 py-2.5">Seats Filled</th>
+                                    <th className="px-4 py-2.5 font-bold text-slate-700">Rem. Seats</th>
                                     <th className="px-4 py-2.5">Occupancy</th>
                                     <th className="px-4 py-2.5 text-right">Actions</th>
                                 </tr>
@@ -186,13 +187,18 @@ const Fleet = () => {
                                                 </span>
                                             )}
                                         </td>
+                                        <td className="px-4 py-2 text-slate-600 font-medium text-sm">{item.capacity}</td>
                                         <td className="px-4 py-2">
                                             <div className="flex items-center font-bold text-slate-700 text-sm">
                                                 <Users size={14} className="text-slate-400 mr-2" />
                                                 {item.seatsFilled}
                                             </div>
                                         </td>
-                                        <td className="px-4 py-2 text-slate-600 font-medium text-sm">{item.capacity}</td>
+                                        <td className="px-4 py-2">
+                                            <span className={`text-sm font-black ${item.seatsAvailable <= 5 ? 'text-red-500' : 'text-slate-700'}`}>
+                                                {item.seatsAvailable}
+                                            </span>
+                                        </td>
                                         <td className="px-4 py-2">
                                             <div className="flex flex-col gap-1 w-24">
                                                 <div className="flex justify-between items-end">

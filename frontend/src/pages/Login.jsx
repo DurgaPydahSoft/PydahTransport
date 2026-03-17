@@ -83,7 +83,7 @@ const Login = () => {
             {/* Background Layer - Brand Consistency */}
             <div className="absolute inset-0 z-0 bg-slate-950">
                 <img
-                    src="/BUS-Background-PYDAH-GROUP.png"
+                    src="/Transport_background.jpg"
                     alt="Pydah Transport Background"
                     className="w-full h-full object-cover opacity-80"
                 />
