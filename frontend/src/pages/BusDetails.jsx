@@ -176,95 +176,148 @@ const BusDetails = () => {
 
     return (
         <Layout>
-            <div className="mb-6">
-                <Link to="/buses" className="text-blue-600 hover:underline text-sm font-medium">← Back to Bus Fleet</Link>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <div className="flex justify-between items-start mb-1">
-                        <h1 className="text-2xl font-bold text-gray-900">{bus.busNumber}</h1>
+            <div className="mb-6 flex items-center justify-between">
+                <Link to="/buses" className="text-blue-600 hover:underline text-sm font-medium flex items-center gap-1">
+                    <span>←</span> Back to Bus Fleet
+                </Link>
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={handlePrint}
+                        className="flex items-center text-sm bg-white text-gray-700 px-4 py-2 rounded-xl font-bold hover:bg-gray-50 transition-all border border-gray-200 shadow-sm"
+                    >
+                        <Download size={16} className="mr-2 text-blue-600" />
+                        Download Report
+                    </button>
+                    {route && (
                         <button
                             type="button"
-                            onClick={handlePrint}
-                            className="flex items-center text-sm bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-100 transition-colors border border-blue-200"
+                            onClick={openAssignModal}
+                            className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 shadow-sm transition-all"
                         >
-                            <Download size={16} className="mr-1.5" />
-                            Report
+                            Assign Passengers
                         </button>
-                    </div>
-                    <p className="text-gray-500 mb-4">{bus.type} • {bus.status}</p>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <span className="text-gray-500">Driver</span>
-                            <p className="font-medium text-gray-800">{bus.driverName || '—'}</p>
-                        </div>
-                        <div>
-                            <span className="text-gray-500">Attendant</span>
-                            <p className="font-medium text-gray-800">{bus.attendantName || '—'}</p>
-                        </div>
-                    </div>
-                    {route && (
-                        <div className="mt-4 pt-4 border-t border-gray-100">
-                            <span className="text-gray-500 text-sm">Assigned route</span>
-                            <p className="font-semibold text-gray-800">{route.routeName} ({route.routeId})</p>
-                            <p className="text-sm text-gray-600">{route.startPoint} → {route.endPoint}</p>
-                        </div>
                     )}
                 </div>
+            </div>
 
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Seat occupancy</h2>
-                    <div className="flex items-end gap-3 mb-4">
-                        <div className="flex-1 bg-gray-100 rounded-xl overflow-hidden h-8">
-                            <div
-                                className={`h-full rounded-xl transition-all duration-500 ${
-                                    occupancyPercent >= 100 ? 'bg-red-500' : occupancyPercent >= 80 ? 'bg-amber-500' : 'bg-green-500'
-                                }`}
-                                style={{ width: `${Math.min(100, occupancyPercent)}%` }}
-                            />
+            {/* Premium Dashboard Header */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 mb-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                    <div>
+                        <div className="flex items-center gap-3 mb-2">
+                            <h1 className="text-4xl font-black text-gray-900 tracking-tight">{bus.busNumber}</h1>
+                            <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${
+                                bus.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                                {bus.status}
+                            </span>
                         </div>
-                        <span className="text-2xl font-bold text-gray-900 tabular-nums">{occupancyPercent}%</span>
+                        <p className="text-gray-500 font-medium flex items-center gap-2">
+                            <Tag size={16} className="text-blue-500" />
+                            {bus.type} • Vehicle Detail View
+                        </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="bg-green-50 rounded-lg p-3">
-                            <p className="text-gray-500 text-xs">Filled</p>
-                            <p className="text-xl font-bold text-green-700">{seatsFilled}</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-lg p-3">
-                            <p className="text-gray-500 text-xs">Available</p>
-                            <p className="text-xl font-bold text-gray-800">{seatsAvailable}</p>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm mt-2">
-                        <div className="bg-blue-50 rounded-lg p-3">
-                            <p className="text-blue-500 text-[10px] font-bold uppercase tracking-wider">Students</p>
-                            <p className="text-lg font-bold text-blue-700">{studentCount}</p>
-                        </div>
-                        <div className="bg-purple-50 rounded-lg p-3">
-                            <p className="text-purple-500 text-[10px] font-bold uppercase tracking-wider">Employees</p>
-                            <p className="text-lg font-bold text-purple-700">{employeeCount}</p>
-                        </div>
-                    </div>
-                    <p className="text-gray-500 text-xs mt-2">Capacity: {capacity} seats</p>
-                    <div className="mt-4">
-                        <p className="text-xs text-gray-500 mb-2">Seat map</p>
-                        <div className="flex flex-wrap gap-1">
-                            {Array.from({ length: capacity }, (_, i) => (
-                                <div
-                                    key={i}
-                                    className={`w-6 h-6 rounded-md flex items-center justify-center text-xs ${
-                                        i < seatsFilled ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'
-                                    }`}
-                                    title={i < seatsFilled ? `Seat ${i + 1} filled` : 'Empty'}
-                                >
-                                    {i < seatsFilled ? '•' : ''}
+
+                    <div className="flex items-center gap-6">
+                        <div className="text-right">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Occupancy</p>
+                            <div className="flex items-center gap-3">
+                                <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div 
+                                        className={`h-full rounded-full transition-all duration-1000 ${
+                                            occupancyPercent >= 90 ? 'bg-red-500' : occupancyPercent >= 70 ? 'bg-amber-500' : 'bg-green-500'
+                                        }`}
+                                        style={{ width: `${occupancyPercent}%` }}
+                                    />
                                 </div>
-                            ))}
+                                <span className="text-2xl font-black text-gray-900">{occupancyPercent}%</span>
+                            </div>
                         </div>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Route Info */}
+                    <div className="bg-blue-50/50 rounded-2xl p-5 border border-blue-100/50">
+                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Assigned Route</p>
+                        {route ? (
+                            <>
+                                <p className="font-bold text-gray-900 text-lg leading-tight mb-1">{route.routeName}</p>
+                                <p className="text-xs text-blue-600 font-medium">{route.startPoint} → {route.endPoint}</p>
+                            </>
+                        ) : (
+                            <p className="text-gray-400 font-medium italic">No route assigned</p>
+                        )}
+                    </div>
+
+                    {/* Staff Info */}
+                    <div className="bg-purple-50/50 rounded-2xl p-5 border border-purple-100/50">
+                        <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-3">Bus Staff</p>
+                        <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs text-gray-500">Driver</span>
+                                <span className="text-sm font-bold text-gray-900">{bus.driverName || '—'}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs text-gray-500">Attendant</span>
+                                <span className="text-sm font-bold text-gray-900">{bus.attendantName || '—'}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Capacity Info */}
+                    <div className="bg-emerald-50/50 rounded-2xl p-5 border border-emerald-100/50">
+                        <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-3">Seat Capacity</p>
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-black text-emerald-700">{seatsFilled}</span>
+                            <span className="text-gray-400 font-bold">/ {capacity}</span>
+                        </div>
+                        <p className="text-[10px] text-emerald-600 font-bold mt-1 uppercase">{seatsAvailable} seats available</p>
+                    </div>
+
+                    {/* Breakdown */}
+                    <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Passenger Mix</p>
+                        <div className="flex gap-4">
+                            <div>
+                                <p className="text-xl font-black text-gray-900">{studentCount}</p>
+                                <p className="text-[10px] font-bold text-blue-500 uppercase">Students</p>
+                            </div>
+                            <div className="w-px h-8 bg-gray-200" />
+                            <div>
+                                <p className="text-xl font-black text-gray-900">{employeeCount}</p>
+                                <p className="text-[10px] font-bold text-purple-500 uppercase">Staff</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Compact Seat Map */}
+                <div className="mt-8 pt-8 border-t border-gray-50">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Visual Seat Map</h3>
+                        <div className="flex gap-4 text-[10px] font-bold uppercase">
+                            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Occupied</div>
+                            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gray-200" /> Available</div>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {Array.from({ length: capacity }, (_, i) => (
+                            <div
+                                key={i}
+                                className={`w-5 h-5 rounded-md flex items-center justify-center text-[8px] transition-all hover:scale-110 ${
+                                    i < seatsFilled ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200' : 'bg-gray-100 text-gray-300'
+                                }`}
+                                title={i < seatsFilled ? `Seat ${i + 1} filled` : 'Empty'}
+                            >
+                                {i < seatsFilled ? '✓' : i + 1}
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
+
 
             <PassengerReport ref={componentRef} passengers={passengers || []} />
 
