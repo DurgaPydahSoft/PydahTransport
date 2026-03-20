@@ -2,22 +2,10 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import Loader from '../components/Loader';
-import {
-    Package,
-    History,
-    Plus,
-    Truck,
-    Search,
-    Filter,
-    ArrowRight,
-    Edit,
-    Trash2,
-    Calendar,
-    Tag,
-    Layers,
-    AlertCircle,
-    ChevronDown,
-    Printer
+import { 
+    Package, Plus, Search, Edit, Trash2, History, Truck, 
+    Calendar, Tag, User, Layers, Printer, ChevronDown, 
+    ChevronUp, LayoutGrid, List, AlertCircle, Filter 
 } from 'lucide-react';
 import BillPrint from '../components/BillPrint';
 
@@ -72,6 +60,7 @@ const Inventory = () => {
     const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
     const [isBillModalOpen, setIsBillModalOpen] = useState(false);
     const [printBill, setPrintBill] = useState(null);
+    const [inventoryView, setInventoryView] = useState('card'); // 'card' or 'table'
     
     const [editingItem, setEditingItem] = useState(null);
     const [editingVendor, setEditingVendor] = useState(null);
@@ -482,46 +471,111 @@ const Inventory = () => {
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                             </div>
+                            <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 shrink-0">
+                                <button 
+                                    onClick={() => setInventoryView('card')}
+                                    className={`p-2 rounded-md transition-all ${inventoryView === 'card' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                    title="Card View"
+                                >
+                                    <LayoutGrid size={20} />
+                                </button>
+                                <button 
+                                    onClick={() => setInventoryView('table')}
+                                    className={`p-2 rounded-md transition-all ${inventoryView === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                    title="Table View"
+                                >
+                                    <List size={20} />
+                                </button>
+                            </div>
                         </div>
 
                         {loading ? (
                             <div className="py-20 flex justify-center"><Loader text="Loading inventory..." /></div>
                         ) : filteredItems.length > 0 ? (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="bg-slate-50 border-b border-slate-100 text-[11px] uppercase text-slate-400 font-black tracking-widest">
-                                            <th className="px-6 py-4">Item Details</th>
-                                            <th className="px-6 py-4">Description</th>
-                                            <th className="px-6 py-4 text-right">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                        {filteredItems.map(item => (
-                                            <tr key={item._id} className="hover:bg-slate-50/50 transition-colors group">
-                                                <td className="px-6 py-5">
-                                                    <div>
-                                                        <p className="font-bold text-slate-800">{item.itemName}</p>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{item.category}</span>
-                                                            <span className="text-[10px] text-slate-400 font-medium">| {item.unit}</span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-5">
-                                                    <p className="text-sm text-slate-500 line-clamp-1">{item.description || 'No description'}</p>
-                                                </td>
-                                                <td className="px-6 py-5 text-right">
-                                                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => openEditModal(item)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all"><Edit size={16} /></button>
-                                                        <button onClick={() => handleDeleteItem(item._id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all"><Trash2 size={16} /></button>
-                                                    </div>
-                                                </td>
+                            inventoryView === 'table' ? (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-50 border-b border-slate-100 text-[11px] uppercase text-slate-400 font-black tracking-widest">
+                                                <th className="px-6 py-4">Item Details</th>
+                                                <th className="px-6 py-4">Description</th>
+                                                <th className="px-6 py-4 text-right">Actions</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {filteredItems.map(item => (
+                                                <tr key={item._id} className="hover:bg-slate-50/50 transition-colors group">
+                                                    <td className="px-6 py-5">
+                                                        <div>
+                                                            <p className="font-bold text-slate-800">{item.itemName}</p>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{item.category}</span>
+                                                                <span className="text-[10px] text-slate-400 font-medium">| {item.unit}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-5">
+                                                        <p className="text-sm text-slate-500 line-clamp-1">{item.description || 'No description'}</p>
+                                                    </td>
+                                                    <td className="px-6 py-5 text-right">
+                                                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => openEditModal(item)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all"><Edit size={16} /></button>
+                                                            <button onClick={() => handleDeleteItem(item._id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all"><Trash2 size={16} /></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                    {filteredItems.map(item => (
+                                        <div key={item._id} className="group relative bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-500/5 transition-all p-5 flex flex-col justify-between overflow-hidden">
+                                            {/* Accent Banner */}
+                                            <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                            
+                                            <div>
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="p-2.5 bg-slate-50 rounded-lg group-hover:bg-blue-50 transition-colors">
+                                                        <Package className="text-slate-400 group-hover:text-blue-600 transition-colors" size={24} />
+                                                    </div>
+                                                    <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-[9px] font-black uppercase tracking-widest">{item.category}</span>
+                                                </div>
+                                                
+                                                <h3 className="text-lg font-black text-slate-900 leading-tight uppercase group-hover:text-blue-700 transition-colors line-clamp-1">{item.itemName}</h3>
+                                                <div className="mt-2 text-xs font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1.5 pt-2 border-t border-slate-50">
+                                                    Measured In: <span className="text-slate-800">{item.unit}</span>
+                                                </div>
+                                                
+                                                <p className="mt-4 text-xs font-medium text-slate-500 line-clamp-2 italic leading-relaxed h-8">
+                                                    {item.description || 'No detailed description provided for this item.'}
+                                                </p>
+                                            </div>
+
+                                            <div className="mt-6 pt-4 border-t border-slate-50 flex items-center justify-between">
+                                                <div className="flex gap-2">
+                                                    <button 
+                                                        onClick={() => openEditModal(item)}
+                                                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                        title="Edit Item"
+                                                    >
+                                                        <Edit size={16} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleDeleteItem(item._id)}
+                                                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                        title="Delete Item"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                                <span className="text-[10px] font-black text-slate-300 uppercase italic">Ref: #{item._id.slice(-4)}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )
                         ) : (
                             <div className="py-20 text-center text-slate-400 bg-slate-50 rounded-lg border-2 border-dashed border-slate-100">
                                 <AlertCircle className="mx-auto mb-3 opacity-20" size={48} />
@@ -557,7 +611,8 @@ const Inventory = () => {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-slate-50/50 text-left text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                                        <th className="px-6 py-4">Date & Bill No</th>
+                                        <th className="px-6 py-4">Bill Date</th>
+                                        <th className="px-6 py-4">Bill No</th>
                                         <th className="px-6 py-4">Vendor & Bus</th>
                                         <th className="px-6 py-4">Items Summary</th>
                                         <th className="px-6 py-4">Total Amount</th>
@@ -568,13 +623,13 @@ const Inventory = () => {
                                     {groupedBills.map(bill => (
                                         <tr key={bill.billNo || bill.date} className="hover:bg-slate-50 transition-colors group">
                                             <td className="px-6 py-5 whitespace-nowrap">
-                                                <div className="flex flex-col">
-                                                    <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
-                                                        <Calendar size={14} className="text-slate-400" />
-                                                        {new Date(bill.date).toLocaleDateString()}
-                                                    </div>
-                                                    <span className="text-xs font-black text-blue-600 mt-1 uppercase tracking-tighter">#{bill.billNo || 'N/A'}</span>
+                                                <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                                                    <Calendar size={14} className="text-slate-400" />
+                                                    {new Date(bill.date).toLocaleDateString()}
                                                 </div>
+                                            </td>
+                                            <td className="px-6 py-5 whitespace-nowrap">
+                                                <span className="text-xs font-black text-blue-600 uppercase tracking-tighter">#{bill.billNo || 'N/A'}</span>
                                             </td>
                                             <td className="px-6 py-5">
                                                 <div className="flex flex-col">
@@ -600,7 +655,7 @@ const Inventory = () => {
                                             <td className="px-6 py-5 text-right">
                                                 <button 
                                                     onClick={() => handlePrint(bill)}
-                                                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                                                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-all"
                                                     title="Print Full Bill"
                                                 >
                                                     <Printer size={16} />
