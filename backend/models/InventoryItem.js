@@ -11,16 +11,6 @@ const inventoryItemSchema = new mongoose.Schema({
         required: true,
         default: 'General'
     },
-    totalQuantity: {
-        type: Number,
-        required: true,
-        default: 0
-    },
-    availableQuantity: {
-        type: Number,
-        required: true,
-        default: 0
-    },
     unit: {
         type: String,
         required: true,

@@ -11,10 +11,27 @@ const inventoryAllocationSchema = new mongoose.Schema({
         ref: 'InventoryItem',
         required: true
     },
+    vendorId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Vendor'
+    },
     quantity: {
         type: Number,
         required: true,
         min: 1
+    },
+    price: {
+        type: Number,
+        default: 0
+    },
+    tyrePosition: {
+        type: String,
+        enum: ['front right', 'front left', 'back right', 'back left', 'rear left', 'rear right'],
+        default: null
+    },
+    kmReading: {
+        type: Number,
+        default: null
     },
     allocatedDate: {
         type: Date,
@@ -31,6 +48,10 @@ const inventoryAllocationSchema = new mongoose.Schema({
     },
     adminName: {
         type: String
+    },
+    billNo: {
+        type: String,
+        trim: true
     }
 }, {
     timestamps: true

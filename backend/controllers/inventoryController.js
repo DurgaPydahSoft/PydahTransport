@@ -1,8 +1,10 @@
 const InventoryItem = require('../models/InventoryItem');
 const InventoryAllocation = require('../models/InventoryAllocation');
 const Bus = require('../models/Bus');
+const Vendor = require('../models/Vendor');
+const TyreRegistry = require('../models/TyreRegistry');
 
-// Get all inventory items
+// Master Inventory
 exports.getItems = async (req, res) => {
     try {
         const items = await InventoryItem.find().sort({ itemName: 1 });
@@ -12,20 +14,10 @@ exports.getItems = async (req, res) => {
     }
 };
 
-// Create a new inventory item
 exports.createItem = async (req, res) => {
     try {
-        const { itemName, category, totalQuantity, unit, description } = req.body;
-        
-        const newItem = new InventoryItem({
-            itemName,
-            category,
-            totalQuantity,
-            availableQuantity: totalQuantity,
-            unit,
-            description
-        });
-
+        const { itemName, category, unit, description } = req.body;
+        const newItem = new InventoryItem({ itemName, category, unit, description });
         await newItem.save();
         res.status(201).json({ message: 'Item created successfully', item: newItem });
     } catch (error) {
@@ -33,41 +25,23 @@ exports.createItem = async (req, res) => {
     }
 };
 
-// Update an inventory item
 exports.updateItem = async (req, res) => {
     try {
         const { id } = req.params;
-        const { itemName, category, totalQuantity, unit, description } = req.body;
-
-        const item = await InventoryItem.findById(id);
-        if (!item) return res.status(404).json({ message: 'Item not found' });
-
-        // Adjust available quantity if total quantity changed
-        const diff = totalQuantity - item.totalQuantity;
-        item.itemName = itemName || item.itemName;
-        item.category = category || item.category;
-        item.totalQuantity = totalQuantity;
-        item.availableQuantity += diff;
-        item.unit = unit || item.unit;
-        item.description = description || item.description;
-
-        await item.save();
-        res.status(200).json({ message: 'Item updated successfully', item });
+        const { itemName, category, unit, description } = req.body;
+        const updatedItem = await InventoryItem.findByIdAndUpdate(id, { itemName, category, unit, description }, { new: true });
+        if (!updatedItem) return res.status(404).json({ message: 'Item not found' });
+        res.status(200).json({ message: 'Item updated successfully', item: updatedItem });
     } catch (error) {
         res.status(400).json({ message: 'Error updating inventory item', error: error.message });
     }
 };
 
-// Delete an inventory item
 exports.deleteItem = async (req, res) => {
     try {
         const { id } = req.params;
         const allocations = await InventoryAllocation.countDocuments({ itemId: id });
-        
-        if (allocations > 0) {
-            return res.status(400).json({ message: 'Cannot delete item with active allocations' });
-        }
-
+        if (allocations > 0) return res.status(400).json({ message: 'Cannot delete item with active allocations' });
         await InventoryItem.findByIdAndDelete(id);
         res.status(200).json({ message: 'Item deleted successfully' });
     } catch (error) {
@@ -75,49 +49,115 @@ exports.deleteItem = async (req, res) => {
     }
 };
 
-// Allocate item to a bus
-exports.allocateItem = async (req, res) => {
+// Vendor Controllers
+exports.getVendors = async (req, res) => {
     try {
-        const { busId, itemId, quantity, remarks, adminName } = req.body;
-
-        const item = await InventoryItem.findById(itemId);
-        if (!item) return res.status(404).json({ message: 'Item not found' });
-
-        if (item.availableQuantity < quantity) {
-            return res.status(400).json({ message: 'Insufficient stock available' });
-        }
-
-        const bus = await Bus.findOne({ busNumber: busId }).catch(() => null) || await Bus.findById(busId).catch(() => null);
-        if (!bus) return res.status(404).json({ message: 'Bus not found' });
-
-        const allocation = new InventoryAllocation({
-            busId: bus._id,
-            itemId,
-            quantity,
-            remarks,
-            adminName
-        });
-
-        await allocation.save();
-
-        // Update item stock
-        item.availableQuantity -= quantity;
-        await item.save();
-
-        res.status(201).json({ message: 'Item allocated successfully', allocation });
+        const vendors = await Vendor.find().sort({ name: 1 });
+        res.status(200).json(vendors);
     } catch (error) {
-        res.status(400).json({ message: 'Error allocating item', error: error.message });
+        res.status(500).json({ message: 'Error fetching vendors', error: error.message });
     }
 };
 
-// Get allocation history
+exports.createVendor = async (req, res) => {
+    try {
+        const newVendor = new Vendor(req.body);
+        await newVendor.save();
+        res.status(201).json({ message: 'Vendor created successfully', vendor: newVendor });
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating vendor', error: error.message });
+    }
+};
+
+exports.updateVendor = async (req, res) => {
+    try {
+        const updatedVendor = await Vendor.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!updatedVendor) return res.status(404).json({ message: 'Vendor not found' });
+        res.status(200).json({ message: 'Vendor updated successfully', vendor: updatedVendor });
+    } catch (error) {
+        res.status(400).json({ message: 'Error updating vendor', error: error.message });
+    }
+};
+
+// Raise Bill (Allocation to Bus)
+exports.raiseBill = async (req, res) => {
+    try {
+        const { vendorId, adminName, busId, billNo, items } = req.body;
+        
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ message: 'No items provided for the bill' });
+        }
+
+        const results = [];
+
+        // Find the bus (if it's one bus per bill now)
+        const bus = await Bus.findOne({ busNumber: busId }).catch(() => null) || 
+                    await Bus.findById(busId).catch(() => null);
+        if (!bus) return res.status(404).json({ message: 'Bus not found' });
+
+        for (const lineItem of items) {
+            const { 
+                itemIds, quantity, price, remarks, 
+                tyrePosition, kmReading, tyreType 
+            } = lineItem;
+            
+            const targetItems = Array.isArray(itemIds) ? itemIds : [itemIds];
+            
+            for (const itemId of targetItems) {
+                const item = await InventoryItem.findById(itemId);
+                if (!item) continue;
+
+                const allocation = new InventoryAllocation({
+                    busId: bus._id,
+                    itemId,
+                    vendorId,
+                    billNo, // Add Bill Number
+                    quantity: quantity || 1,
+                    price: price || 0,
+                    remarks,
+                    adminName,
+                    tyrePosition,
+                    kmReading: kmReading || 0
+                });
+
+                await allocation.save();
+
+                // If it's a tyre, update Registry
+                if (item.category === 'Tires' && tyrePosition) {
+                    await TyreRegistry.updateMany(
+                        { busId: bus._id, position: tyrePosition, status: 'Active' },
+                        { status: 'Replaced' }
+                    );
+
+                    const registryEntry = new TyreRegistry({
+                        busId: bus._id,
+                        position: tyrePosition,
+                        tyreType: tyreType || (item.itemName.toLowerCase().includes('old') ? 'old tyre' : 'new tyre'),
+                        installKm: kmReading || 0,
+                        status: 'Active'
+                    });
+                    await registryEntry.save();
+                }
+                results.push(allocation);
+            }
+        }
+
+        res.status(201).json({ message: 'Bill(s) raised and assigned successfully', count: results.length });
+    } catch (error) {
+        res.status(400).json({ message: 'Error raising bill', error: error.message });
+    }
+};
+
+// Internal allocation (legacy/backward compatibility)
+exports.allocateItem = exports.raiseBill;
+
+// Get allocation/bill history
 exports.getHistory = async (req, res) => {
     try {
         const { busId } = req.params;
         const query = {};
         
         if (busId && busId !== 'all') {
-            // Find bus by number or ID
             const bus = await Bus.findOne({ busNumber: busId }).catch(() => null) || await Bus.findById(busId).catch(() => null);
             if (bus) query.busId = bus._id;
         }
@@ -125,10 +165,31 @@ exports.getHistory = async (req, res) => {
         const history = await InventoryAllocation.find(query)
             .populate('itemId', 'itemName category unit')
             .populate('busId', 'busNumber type')
+            .populate('vendorId', 'name')
             .sort({ allocatedDate: -1 });
 
         res.status(200).json(history);
     } catch (error) {
-        res.status(500).json({ message: 'Error fetching allocation history', error: error.message });
+        res.status(500).json({ message: 'Error fetching history', error: error.message });
+    }
+};
+
+// Tyre Registry
+exports.getTyreRegistry = async (req, res) => {
+    try {
+        const { busId } = req.params;
+        const query = { status: 'Active' };
+        if (busId && busId !== 'all') {
+            const bus = await Bus.findOne({ busNumber: busId }).catch(() => null) || await Bus.findById(busId).catch(() => null);
+            if (bus) query.busId = bus._id;
+        }
+
+        const registry = await TyreRegistry.find(query)
+            .populate('busId', 'busNumber type')
+            .sort({ updatedAt: -1 });
+        
+        res.status(200).json(registry);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching tyre registry', error: error.message });
     }
 };
