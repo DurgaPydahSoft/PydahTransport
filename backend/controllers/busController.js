@@ -18,12 +18,14 @@ const getBusDetails = async (req, res) => {
             route = await Route.findOne({ routeId: bus.assignedRouteId });
         }
         let mysqlPassengers = [];
+        const academicYear = resolveAcademicYear(req.query);
         if (mysqlPool) {
-            const parts = getActivePassengerSqlParts(resolveAcademicYear(req.query));
+            const parts = getActivePassengerSqlParts(academicYear);
             const [rows] = await mysqlPool.query(
                 `SELECT tr.id, tr.admission_number, tr.student_name, tr.route_name, tr.stage_name, tr.fare, tr.request_date, tr.bus_id,
                         COALESCE(s1.course, s2.course) as course,
                         COALESCE(s1.branch, s2.branch) as branch,
+                        COALESCE(s1.current_year, s2.current_year, tr.year_of_study) as year_of_study,
                         COALESCE(s1.pin_no, s2.pin_no) as pin_no,
                         ${parts.effectiveExpiryExpr} as effective_expiry_date,
                         ${parts.isExpiredExpr} as is_expired
@@ -37,6 +39,8 @@ const getBusDetails = async (req, res) => {
             mysqlPassengers = rows.map(r => ({
                 ...r,
                 user_type: 'student',
+                academic_year: academicYear,
+                year_of_study: r.year_of_study != null ? Number(r.year_of_study) : null,
                 is_expired: Boolean(r.is_expired),
             }));
         }
@@ -52,7 +56,9 @@ const getBusDetails = async (req, res) => {
             request_date: r.request_date || r.created_at,
             user_type: 'employee',
             bus_id: r.bus_id,
-            course: 'Employee'
+            course: 'Employee',
+            academic_year: null,
+            year_of_study: null,
         }));
 
         const activePassengers = mysqlPassengers.filter((p) => !p.is_expired);
@@ -87,6 +93,7 @@ const getBusDetails = async (req, res) => {
             } : null,
             passengers,
             expiredPassengers,
+            academicYear,
             seatsFilled,
             seatsAvailable,
             capacity,

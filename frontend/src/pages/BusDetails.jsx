@@ -169,7 +169,7 @@ const BusDetails = () => {
         );
     }
 
-    const { bus, route, passengers, seatsFilled, seatsAvailable, capacity, occupancyPercent } = data;
+    const { bus, route, passengers, academicYear, seatsFilled, seatsAvailable, capacity, occupancyPercent } = data;
 
     const activePassengers = (passengers || []).filter((p) => !p.is_expired);
     const studentCount = activePassengers.filter(p => !p.user_type || p.user_type === 'student').length;
@@ -374,6 +374,9 @@ const BusDetails = () => {
                                             <th className="p-4">Type</th>
                                             <th className="p-4">ID Number</th>
                                             <th className="p-4">Name</th>
+                                            <th className="p-4">Course</th>
+                                            <th className="p-4 text-center">Year</th>
+                                            <th className="p-4">Academic Year</th>
                                             <th className="p-4">Stage</th>
                                             <th className="p-4">Fare</th>
                                             <th className="p-4 text-right">Actions</th>
@@ -393,6 +396,32 @@ const BusDetails = () => {
                                                 </td>
                                                 <td className="p-4 font-medium text-gray-600">{p.admission_number || p.emp_no}</td>
                                                 <td className="p-4">{p.student_name || p.employee_name}</td>
+                                                <td className="p-4">
+                                                    {p.user_type === 'employee' ? (
+                                                        <span className="text-gray-500 text-sm">Employee</span>
+                                                    ) : (
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-800">{p.course || '—'}</p>
+                                                            {p.branch && (
+                                                                <p className="text-[11px] text-gray-500">{p.branch}</p>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {p.user_type === 'employee' ? (
+                                                        <span className="text-gray-400">—</span>
+                                                    ) : (p.year_of_study != null && p.year_of_study !== '') ? (
+                                                        <span className="inline-flex bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md text-xs font-bold">
+                                                            Y{p.year_of_study}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-gray-400 text-sm">—</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-sm text-gray-700 font-medium">
+                                                    {p.user_type === 'employee' ? '—' : (p.academic_year || academicYear || '—')}
+                                                </td>
                                                 <td className="p-4">{p.stage_name}</td>
                                                 <td className="p-4 text-gray-500">{p.user_type === 'employee' ? 'Free (₹0)' : `₹${p.fare}`}</td>
                                                 <td className="p-4 text-right">
