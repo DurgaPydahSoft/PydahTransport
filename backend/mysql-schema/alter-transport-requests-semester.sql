@@ -15,3 +15,21 @@ ALTER TABLE transport_requests
 
 -- If you already ran the ALTER above without expiry_date, add it with:
 -- ALTER TABLE transport_requests ADD COLUMN expiry_date DATE NULL COMMENT 'Transport valid until (semester end for that year/sem)' AFTER semester_end_date;
+
+-- Course + year-of-study transport expiry (one date per course per year-of-study per academic year)
+CREATE TABLE IF NOT EXISTS course_transport_expiry (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  course_id INT NOT NULL,
+  academic_year VARCHAR(20) NOT NULL,
+  year_of_study TINYINT NOT NULL,
+  expiry_date DATE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_course_year_academic (course_id, academic_year, year_of_study),
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+
+-- If you already created the old table (course-only, no year_of_study), run:
+-- ALTER TABLE course_transport_expiry ADD COLUMN year_of_study TINYINT NOT NULL DEFAULT 1 AFTER academic_year;
+-- ALTER TABLE course_transport_expiry DROP INDEX uk_course_academic_year;
+-- ALTER TABLE course_transport_expiry ADD UNIQUE KEY uk_course_year_academic (course_id, academic_year, year_of_study);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
-import { CreditCard, Trash2, Check, X } from 'lucide-react';
+import { CreditCard, Trash2, Calendar, Pencil, Users } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import BusPassCard from '../components/BusPassCard';
@@ -11,6 +11,25 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 const statusDisplay = (s) => (s || 'pending').charAt(0).toUpperCase() + (s || 'pending').slice(1);
 
 const formatDate = (d) => (d ? new Date(d).toLocaleDateString() : '—');
+
+const getDefaultAcademicYear = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    return now.getMonth() >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+};
+
+const courseExpiryKey = (courseId, yearOfStudy) => `${courseId}-${yearOfStudy}`;
+
+const getAcademicYearOptions = () => {
+    const defaultYear = getDefaultAcademicYear();
+    const startYear = Number(defaultYear.split('-')[0]);
+    const options = [];
+    for (let offset = -3; offset <= 3; offset += 1) {
+        const start = startYear + offset;
+        options.push(`${start}-${start + 1}`);
+    }
+    return options;
+};
 
 const TransportRequests = () => {
     const [requests, setRequests] = useState([]);
@@ -28,6 +47,15 @@ const TransportRequests = () => {
     const [approveModal, setApproveModal] = useState({ open: false, requestId: null, data: null, loading: true, error: null });
     const [selectedPassPassenger, setSelectedPassPassenger] = useState(null);
     const [fetchingPass, setFetchingPass] = useState(false);
+    const [courseExpiryModalOpen, setCourseExpiryModalOpen] = useState(false);
+    const [academicYear, setAcademicYear] = useState(getDefaultAcademicYear());
+    const [selectedExpiryCourseId, setSelectedExpiryCourseId] = useState('');
+    const [courseExpiryList, setCourseExpiryList] = useState([]);
+    const [courseExpiryLoading, setCourseExpiryLoading] = useState(false);
+    const [courseExpirySaving, setCourseExpirySaving] = useState(null);
+    const [courseExpiryEdits, setCourseExpiryEdits] = useState({});
+    const [editingYears, setEditingYears] = useState({});
+    const academicYearOptions = getAcademicYearOptions();
 
     const passComponentRef = useRef();
     const handlePrintPass = useReactToPrint({
@@ -105,10 +133,188 @@ const TransportRequests = () => {
         }
     };
 
+    const fetchCourseExpiry = async () => {
+        setCourseExpiryLoading(true);
+        try {
+            const response = await fetch(`${API_BASE}/students/course-expiry?academicYear=${encodeURIComponent(academicYear)}`);
+            const data = await response.json();
+            if (response.ok) {
+                setCourseExpiryList(data.courses || []);
+                const edits = {};
+                (data.courses || []).forEach((c) => {
+                    if (c.expiry_date) {
+                        edits[courseExpiryKey(c.course_id, c.year_of_study)] = c.expiry_date.slice(0, 10);
+                    }
+                });
+                setCourseExpiryEdits(edits);
+            } else {
+                setMessage({ text: data.message || 'Failed to load course expiry settings.', type: 'error' });
+            }
+        } catch (e) {
+            setMessage({ text: 'Error loading course expiry settings.', type: 'error' });
+        } finally {
+            setCourseExpiryLoading(false);
+        }
+    };
+
+    const handleSaveCourseExpiry = async (courseId, courseName, yearOfStudy) => {
+        const expiryDate = courseExpiryEdits[courseExpiryKey(courseId, yearOfStudy)];
+        if (!expiryDate) {
+            setMessage({ text: 'Please select an expiry date.', type: 'error' });
+            return;
+        }
+        const saveKey = courseExpiryKey(courseId, yearOfStudy);
+        setCourseExpirySaving(saveKey);
+        try {
+            const response = await fetch(`${API_BASE}/students/course-expiry`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    course_id: courseId,
+                    academic_year: academicYear,
+                    year_of_study: yearOfStudy,
+                    expiry_date: expiryDate,
+                }),
+            });
+            const data = await response.json();
+            if (response.ok) {
+                setMessage({ text: data.message || `Expiry set for ${courseName} Year ${yearOfStudy}.`, type: 'success' });
+                setEditingYears((prev) => {
+                    const next = { ...prev };
+                    delete next[saveKey];
+                    return next;
+                });
+                fetchCourseExpiry();
+                fetchRequests();
+            } else {
+                setMessage({ text: data.message || 'Failed to save course expiry.', type: 'error' });
+            }
+        } catch (e) {
+            setMessage({ text: 'Error saving course expiry.', type: 'error' });
+        } finally {
+            setCourseExpirySaving(null);
+        }
+    };
+
+    const handleClearCourseExpiry = async (courseId, courseName, yearOfStudy) => {
+        if (!window.confirm(`Remove expiry for ${courseName} Year ${yearOfStudy}? Students will fall back to semester-based expiry.`)) return;
+        const saveKey = courseExpiryKey(courseId, yearOfStudy);
+        setCourseExpirySaving(saveKey);
+        try {
+            const response = await fetch(
+                `${API_BASE}/students/course-expiry/${courseId}?academicYear=${encodeURIComponent(academicYear)}&yearOfStudy=${yearOfStudy}`,
+                { method: 'DELETE' }
+            );
+            const data = await response.json();
+            if (response.ok) {
+                setMessage({ text: data.message || 'Course expiry removed.', type: 'success' });
+                setCourseExpiryEdits((prev) => {
+                    const next = { ...prev };
+                    delete next[courseExpiryKey(courseId, yearOfStudy)];
+                    return next;
+                });
+                setEditingYears((prev) => {
+                    const next = { ...prev };
+                    delete next[courseExpiryKey(courseId, yearOfStudy)];
+                    return next;
+                });
+                fetchCourseExpiry();
+                fetchRequests();
+            } else {
+                setMessage({ text: data.message || 'Failed to remove course expiry.', type: 'error' });
+            }
+        } catch (e) {
+            setMessage({ text: 'Error removing course expiry.', type: 'error' });
+        } finally {
+            setCourseExpirySaving(null);
+        }
+    };
+
+    const openCourseExpiryModal = () => {
+        setCourseExpiryModalOpen(true);
+        setSelectedExpiryCourseId('');
+        setEditingYears({});
+    };
+
+    const closeCourseExpiryModal = () => {
+        setCourseExpiryModalOpen(false);
+        setSelectedExpiryCourseId('');
+        setEditingYears({});
+    };
+
+    const handleAcademicYearChange = (value) => {
+        setAcademicYear(value);
+        setSelectedExpiryCourseId('');
+        setEditingYears({});
+    };
+
+    const startEditYear = (rowKey, existingDate) => {
+        setEditingYears((prev) => ({ ...prev, [rowKey]: true }));
+        if (existingDate) {
+            setCourseExpiryEdits((prev) => ({ ...prev, [rowKey]: existingDate.slice(0, 10) }));
+        }
+    };
+
+    const cancelEditYear = (rowKey, hadExpiry, existingDate) => {
+        setEditingYears((prev) => {
+            const next = { ...prev };
+            delete next[rowKey];
+            return next;
+        });
+        if (hadExpiry && existingDate) {
+            setCourseExpiryEdits((prev) => ({ ...prev, [rowKey]: existingDate.slice(0, 10) }));
+        } else {
+            setCourseExpiryEdits((prev) => {
+                const next = { ...prev };
+                delete next[rowKey];
+                return next;
+            });
+        }
+    };
+
+    const getYearsForSelectedCourse = () => {
+        if (!selectedExpiryCourseId) return [];
+        const fromApi = courseExpiryList.filter(
+            (c) => String(c.course_id) === String(selectedExpiryCourseId)
+        );
+        if (fromApi.length > 0) return fromApi;
+
+        const course = courses.find((c) => String(c.id) === String(selectedExpiryCourseId));
+        if (!course) return [];
+        const totalYears = course.total_years || 4;
+        return Array.from({ length: totalYears }, (_, index) => ({
+            course_id: course.id,
+            course_name: course.name,
+            year_of_study: index + 1,
+            expiry_date: null,
+            is_past: 0,
+            passenger_count: 0,
+            active_passenger_count: 0,
+            expired_passenger_count: 0,
+        }));
+    };
+
+    const selectedCourseMeta = courses.find((c) => String(c.id) === String(selectedExpiryCourseId));
+    const selectedCourseYears = getYearsForSelectedCourse();
+    const selectedCoursePassengerTotal = selectedCourseYears.reduce(
+        (sum, row) => sum + Number(row.passenger_count || 0),
+        0
+    );
+    const selectedCourseActiveTotal = selectedCourseYears.reduce(
+        (sum, row) => sum + Number(row.active_passenger_count || 0),
+        0
+    );
+
     useEffect(() => {
         fetchRoutes();
         fetchCourses();
     }, []);
+
+    useEffect(() => {
+        if (courseExpiryModalOpen) {
+            fetchCourseExpiry();
+        }
+    }, [courseExpiryModalOpen, academicYear]);
 
     useEffect(() => {
         fetchRequests();
@@ -117,9 +323,10 @@ const TransportRequests = () => {
 
     const calculateStats = () => {
         const total = requests.length;
-        const approved = requests.filter(r => (r.status || '').toLowerCase() === 'approved').length;
+        const approved = requests.filter(r => (r.status || '').toLowerCase() === 'approved' && !r.is_expired).length;
+        const expired = requests.filter(r => (r.status || '').toLowerCase() === 'approved' && r.is_expired).length;
         const pending = requests.filter(r => (r.status || '').toLowerCase() === 'pending').length;
-        return { total, approved, pending };
+        return { total, approved, expired, pending };
     };
 
     const stats = calculateStats();
@@ -241,16 +448,27 @@ const TransportRequests = () => {
     };
 
     const isPending = (req) => (req.status || '').toLowerCase() === 'pending';
+    const isExpiredPass = (req) => (req.status || '').toLowerCase() === 'approved' && Boolean(req.is_expired);
 
     return (
         <Layout>
-            <div className="mb-8">
-                <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Transport Requests</h2>
-                <p className="text-gray-500 mt-1">View, approve, or reject student transport requests. Approval creates the transport fee (TRN01) in Fee Management.</p>
+            <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div>
+                    <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Transport Requests</h2>
+                    <p className="text-gray-500 mt-1">View, approve, or reject student transport requests. Approval creates the transport fee (TRN01) in Fee Management.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={openCourseExpiryModal}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50 shadow-sm"
+                >
+                    <Calendar size={18} />
+                    Course Expiry Settings
+                </button>
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
                     <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
                         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -265,8 +483,17 @@ const TransportRequests = () => {
                         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-gray-500">Approved</p>
+                        <p className="text-sm font-medium text-gray-500">Active Approved</p>
                         <p className="text-2xl font-bold text-gray-900">{stats.approved}</p>
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+                    <div className="p-3 bg-red-50 rounded-xl text-red-600">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-gray-500">Expired Passes</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.expired}</p>
                     </div>
                 </div>
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
@@ -332,7 +559,9 @@ const TransportRequests = () => {
                     >
                         <option value="">All Status</option>
                         <option value="pending">Pending</option>
-                        <option value="approved">Approved</option>
+                        <option value="approved">Approved (all)</option>
+                        <option value="active">Active (not expired)</option>
+                        <option value="expired">Expired</option>
                         <option value="rejected">Rejected</option>
                     </select>
                 </div>
@@ -438,12 +667,24 @@ const TransportRequests = () => {
                                         <td className="p-4">{req.stage_name}</td>
                                         <td className="p-4 font-medium text-gray-900">{req.user_type === 'employee' ? 'Free (₹0)' : `₹${req.fare}`}</td>
                                         <td className="p-4">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${(req.status || '').toLowerCase() === 'approved' ? 'bg-green-100 text-green-700' :
-                                                (req.status || '').toLowerCase() === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                    'bg-gray-100 text-gray-600'
-                                                }`}>
-                                                {statusDisplay(req.status)}
-                                            </span>
+                                            {isExpiredPass(req) ? (
+                                                <span className="px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                                                    Expired
+                                                </span>
+                                            ) : (
+                                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${(req.status || '').toLowerCase() === 'approved' ? 'bg-green-100 text-green-700' :
+                                                    (req.status || '').toLowerCase() === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                                        'bg-gray-100 text-gray-600'
+                                                    }`}>
+                                                    {statusDisplay(req.status)}
+                                                </span>
+                                            )}
+                                            {req.effective_expiry_date && req.user_type !== 'employee' && (
+                                                <p className="text-[10px] text-gray-400 mt-1">
+                                                    Until {formatDate(req.effective_expiry_date)}
+                                                    {req.course_expiry_date ? ` (course Y${req.year_of_study || '?'})` : ''}
+                                                </p>
+                                            )}
                                         </td>
                                         <td className="p-4 text-gray-500">
                                             {new Date(req.request_date).toLocaleDateString()}
@@ -470,7 +711,7 @@ const TransportRequests = () => {
                                                         </button>
                                                     </>
                                                 )}
-                                                {req.status === 'approved' && (
+                                                {req.status === 'approved' && !isExpiredPass(req) && (
                                                     <button
                                                         type="button"
                                                         disabled={fetchingPass}
@@ -502,6 +743,189 @@ const TransportRequests = () => {
                 </div>
             )
             }
+
+            <Modal
+                isOpen={courseExpiryModalOpen}
+                onClose={closeCourseExpiryModal}
+                title="Course & Year-wise Bus Pass Expiry"
+                maxWidth="max-w-2xl"
+            >
+                <p className="text-sm text-slate-500 mb-5">
+                    Select academic year and course, then set or edit expiry dates for each year of study.
+                    Course expiry overrides semester dates for seat occupancy.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                            Academic Year
+                        </label>
+                        <select
+                            value={academicYear}
+                            onChange={(e) => handleAcademicYearChange(e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        >
+                            {academicYearOptions.map((year) => (
+                                <option key={year} value={year}>{year}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                            Course
+                        </label>
+                        <select
+                            value={selectedExpiryCourseId}
+                            onChange={(e) => {
+                                setSelectedExpiryCourseId(e.target.value);
+                                setEditingYears({});
+                            }}
+                            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        >
+                            <option value="">Select a course</option>
+                            {courses.map((course) => (
+                                <option key={course.id} value={course.id}>
+                                    {course.name}{course.code ? ` (${course.code})` : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {!selectedExpiryCourseId ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
+                        Choose a course to manage year-wise expiry dates.
+                    </div>
+                ) : courseExpiryLoading ? (
+                    <Loader text="Loading expiry dates..." />
+                ) : (
+                    <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-gray-100">
+                            <h4 className="font-bold text-slate-800">{selectedCourseMeta?.name || 'Selected course'}</h4>
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                                <span className="font-semibold text-slate-500">{academicYear}</span>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+                                    <Users size={14} />
+                                    {selectedCoursePassengerTotal} approved · {selectedCourseActiveTotal} active
+                                </span>
+                            </div>
+                        </div>
+
+                        {selectedCourseYears.map((yearRow) => {
+                            const rowKey = courseExpiryKey(yearRow.course_id, yearRow.year_of_study);
+                            const hasExpiry = Boolean(yearRow.expiry_date);
+                            const isEditing = Boolean(editingYears[rowKey]);
+                            const passengerCount = Number(yearRow.passenger_count || 0);
+                            const activeCount = Number(yearRow.active_passenger_count || 0);
+                            const expiredCount = Number(yearRow.expired_passenger_count || 0);
+
+                            return (
+                                <div
+                                    key={rowKey}
+                                    className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 flex flex-col gap-3"
+                                >
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                                    <div className="sm:w-36 flex-shrink-0 space-y-1.5">
+                                        <span className="inline-flex bg-blue-100 text-blue-800 px-3 py-1 rounded-lg text-xs font-bold">
+                                            Year {yearRow.year_of_study}
+                                        </span>
+                                        <p className="text-[11px] text-slate-600 font-medium flex items-center gap-1">
+                                            <Users size={12} className="text-slate-400" />
+                                            {passengerCount} passenger{passengerCount !== 1 ? 's' : ''}
+                                        </p>
+                                        {passengerCount > 0 && (
+                                            <p className="text-[10px] text-slate-500 leading-snug">
+                                                <span className="text-green-700 font-semibold">{activeCount} active</span>
+                                                {expiredCount > 0 && (
+                                                    <> · <span className="text-red-600 font-semibold">{expiredCount} expired</span></>
+                                                )}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {!isEditing ? (
+                                        <>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Expiry Date</p>
+                                                {hasExpiry ? (
+                                                    <p className={`font-semibold ${yearRow.is_past ? 'text-red-600' : 'text-green-700'}`}>
+                                                        {formatDate(yearRow.expiry_date)}
+                                                        {yearRow.is_past ? ' · Expired' : ''}
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-sm text-gray-400">Not set — semester-based expiry applies</p>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                {hasExpiry ? (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => startEditYear(rowKey, yearRow.expiry_date)}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 text-xs font-semibold hover:bg-blue-50"
+                                                        >
+                                                            <Pencil size={14} />
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            disabled={courseExpirySaving === rowKey}
+                                                            onClick={() => handleClearCourseExpiry(yearRow.course_id, yearRow.course_name, yearRow.year_of_study)}
+                                                            className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => startEditYear(rowKey, null)}
+                                                        className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
+                                                    >
+                                                        Set Date
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="flex-1 min-w-0">
+                                                <label className="block text-xs text-slate-500 uppercase font-semibold mb-1">
+                                                    {hasExpiry ? 'New expiry date' : 'Set expiry date'}
+                                                </label>
+                                                <input
+                                                    type="date"
+                                                    value={courseExpiryEdits[rowKey] || ''}
+                                                    onChange={(e) => setCourseExpiryEdits((prev) => ({ ...prev, [rowKey]: e.target.value }))}
+                                                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                <button
+                                                    type="button"
+                                                    disabled={courseExpirySaving === rowKey}
+                                                    onClick={() => handleSaveCourseExpiry(yearRow.course_id, yearRow.course_name, yearRow.year_of_study)}
+                                                    className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                                                >
+                                                    {courseExpirySaving === rowKey ? 'Saving...' : hasExpiry ? 'Update' : 'Save'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => cancelEditYear(rowKey, hasExpiry, yearRow.expiry_date)}
+                                                    className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-semibold hover:bg-white"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </Modal>
 
             <Modal
                 isOpen={approveModal.open}

@@ -109,7 +109,7 @@ const BusDetails = () => {
         }
         try {
             const response = await fetch(
-                `${API}/transport-requests?route_id=${encodeURIComponent(data.bus.assignedRouteId)}&status=approved&bus_id=unassigned`
+                `${API}/transport-requests?route_id=${encodeURIComponent(data.bus.assignedRouteId)}&status=active&bus_id=unassigned`
             );
             const list = await response.json();
             setUnassignedPassengers(Array.isArray(list) ? list : []);
@@ -170,9 +170,10 @@ const BusDetails = () => {
     }
 
     const { bus, route, passengers, seatsFilled, seatsAvailable, capacity, occupancyPercent } = data;
-    
-    const studentCount = passengers.filter(p => !p.user_type || p.user_type === 'student').length;
-    const employeeCount = passengers.filter(p => p.user_type === 'employee').length;
+
+    const activePassengers = (passengers || []).filter((p) => !p.is_expired);
+    const studentCount = activePassengers.filter(p => !p.user_type || p.user_type === 'student').length;
+    const employeeCount = activePassengers.filter(p => p.user_type === 'employee').length;
 
     return (
         <Layout>
@@ -319,7 +320,7 @@ const BusDetails = () => {
             </div>
 
 
-            <PassengerReport ref={componentRef} passengers={passengers || []} />
+            <PassengerReport ref={componentRef} passengers={activePassengers} />
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="border-b border-gray-100 flex">
@@ -380,18 +381,22 @@ const BusDetails = () => {
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
                                         {passengers.map((p, i) => (
-                                            <tr key={p.id} className="hover:bg-gray-50">
+                                            <tr key={p.id} className={`hover:bg-gray-50 ${p.is_expired ? 'opacity-60 bg-red-50/30' : ''}`}>
                                                 <td className="p-4 text-gray-500">{i + 1}</td>
                                                 <td className="p-4">
                                                     <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${p.user_type === 'employee' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                                                         {p.user_type || 'student'}
                                                     </span>
+                                                    {p.is_expired && (
+                                                        <span className="ml-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">Expired</span>
+                                                    )}
                                                 </td>
                                                 <td className="p-4 font-medium text-gray-600">{p.admission_number || p.emp_no}</td>
                                                 <td className="p-4">{p.student_name || p.employee_name}</td>
                                                 <td className="p-4">{p.stage_name}</td>
                                                 <td className="p-4 text-gray-500">{p.user_type === 'employee' ? 'Free (₹0)' : `₹${p.fare}`}</td>
                                                 <td className="p-4 text-right">
+                                                    {!p.is_expired && (
                                                     <button
                                                         type="button"
                                                         disabled={fetchingPass}
@@ -401,6 +406,7 @@ const BusDetails = () => {
                                                     >
                                                         <CreditCard size={18} />
                                                     </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}

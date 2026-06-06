@@ -39,7 +39,7 @@ const Fleet = () => {
     const handleDownloadReport = async () => {
         setIsPrinting(true);
         try {
-            const response = await fetch(`${API}/transport-requests?status=approved`);
+            const response = await fetch(`${API}/transport-requests?status=active`);
             if (response.ok) {
                 const data = await response.json();
                 setPrintPassengers(data);

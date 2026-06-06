@@ -225,3 +225,16 @@ CREATE TABLE IF NOT EXISTS transport_requests (
 );
 
 -- Add semester/expiry columns: run alter-transport-requests-semester.sql when semesters table exists.
+
+-- Course + year-of-study transport expiry (overrides semester expiry for that course/year in an academic year)
+CREATE TABLE IF NOT EXISTS course_transport_expiry (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  course_id INT NOT NULL,
+  academic_year VARCHAR(20) NOT NULL,
+  year_of_study TINYINT NOT NULL,
+  expiry_date DATE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_course_year_academic (course_id, academic_year, year_of_study),
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);

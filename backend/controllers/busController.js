@@ -2,6 +2,7 @@ const Bus = require('../models/Bus');
 const Route = require('../models/Route');
 const { mysqlPool } = require('../config/db');
 const EmployeeTransportRequest = require('../models/EmployeeTransportRequest');
+const { resolveAcademicYear, getActivePassengerSqlParts } = require('./transportRequestController');
 
 // @desc    Get bus details with assigned route, passenger list, seats filled
 // @route   GET /api/buses/:id/details
@@ -18,19 +19,26 @@ const getBusDetails = async (req, res) => {
         }
         let mysqlPassengers = [];
         if (mysqlPool) {
+            const parts = getActivePassengerSqlParts(resolveAcademicYear(req.query));
             const [rows] = await mysqlPool.query(
                 `SELECT tr.id, tr.admission_number, tr.student_name, tr.route_name, tr.stage_name, tr.fare, tr.request_date, tr.bus_id,
                         COALESCE(s1.course, s2.course) as course,
                         COALESCE(s1.branch, s2.branch) as branch,
-                        COALESCE(s1.pin_no, s2.pin_no) as pin_no
+                        COALESCE(s1.pin_no, s2.pin_no) as pin_no,
+                        ${parts.effectiveExpiryExpr} as effective_expiry_date,
+                        ${parts.isExpiredExpr} as is_expired
                  FROM transport_requests tr
-                 LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
-                 LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
-                 WHERE tr.bus_id = ? AND tr.status = 'approved' 
+                 ${parts.studentJoins}
+                 ${parts.expiryJoins}
+                 WHERE tr.bus_id = ? AND tr.status = 'approved'
                  ORDER BY tr.stage_name, tr.student_name`,
-                [bus.busNumber]
+                [...parts.expiryParams, bus.busNumber]
             );
-            mysqlPassengers = rows.map(r => ({ ...r, user_type: 'student' }));
+            mysqlPassengers = rows.map(r => ({
+                ...r,
+                user_type: 'student',
+                is_expired: Boolean(r.is_expired),
+            }));
         }
 
         const mongoRequests = await EmployeeTransportRequest.find({ bus_id: bus.busNumber, status: 'approved' }).lean();
@@ -47,10 +55,12 @@ const getBusDetails = async (req, res) => {
             course: 'Employee'
         }));
 
-        const passengers = [...mysqlPassengers, ...mongoPassengers];
+        const activePassengers = mysqlPassengers.filter((p) => !p.is_expired);
+        const expiredPassengers = mysqlPassengers.filter((p) => p.is_expired);
+        const passengers = [...activePassengers, ...mongoPassengers, ...expiredPassengers];
         passengers.sort((a, b) => a.stage_name.localeCompare(b.stage_name) || a.student_name.localeCompare(b.student_name));
         const capacity = bus.capacity || 0;
-        const seatsFilled = passengers.length;
+        const seatsFilled = activePassengers.length + mongoPassengers.length;
         const seatsAvailable = Math.max(0, capacity - seatsFilled);
         const occupancyPercent = capacity > 0 ? Math.min(100, Math.round((seatsFilled / capacity) * 100)) : 0;
 
@@ -76,6 +86,7 @@ const getBusDetails = async (req, res) => {
                 stages: route.stages,
             } : null,
             passengers,
+            expiredPassengers,
             seatsFilled,
             seatsAvailable,
             capacity,
@@ -99,11 +110,17 @@ const getBusesOverview = async (req, res) => {
 
         let counts = {};
         if (mysqlPool && buses.length > 0) {
+            const parts = getActivePassengerSqlParts(resolveAcademicYear(req.query));
             const busNumbers = buses.map((b) => b.busNumber);
             const placeholders = busNumbers.map(() => '?').join(',');
             const [rows] = await mysqlPool.query(
-                `SELECT bus_id AS busNumber, COUNT(*) AS seatsFilled FROM transport_requests WHERE status = 'approved' AND bus_id IN (${placeholders}) GROUP BY bus_id`,
-                busNumbers
+                `SELECT tr.bus_id AS busNumber, COUNT(*) AS seatsFilled
+                 FROM transport_requests tr
+                 ${parts.studentJoins}
+                 ${parts.expiryJoins}
+                 WHERE tr.status = 'approved' AND ${parts.activeWhere} AND tr.bus_id IN (${placeholders})
+                 GROUP BY tr.bus_id`,
+                [...parts.expiryParams, ...busNumbers]
             );
             const mysqlCounts = Object.fromEntries((rows || []).map((r) => [r.busNumber, Number(r.seatsFilled)]));
             
@@ -164,9 +181,14 @@ const autoAllocate = async (req, res) => {
         }
 
         const capacity = bus.capacity || 0;
+        const parts = getActivePassengerSqlParts(resolveAcademicYear(req.query));
         const [current] = await mysqlPool.query(
-            "SELECT COUNT(*) AS n FROM transport_requests WHERE bus_id = ? AND status = 'approved'",
-            [bus.busNumber]
+            `SELECT COUNT(*) AS n
+             FROM transport_requests tr
+             ${parts.studentJoins}
+             ${parts.expiryJoins}
+             WHERE tr.bus_id = ? AND tr.status = 'approved' AND ${parts.activeWhere}`,
+            [...parts.expiryParams, bus.busNumber]
         );
         const currentFilled = current[0]?.n ?? 0;
         const slotsLeft = Math.max(0, capacity - currentFilled);
@@ -175,8 +197,15 @@ const autoAllocate = async (req, res) => {
         }
 
         const [unassigned] = await mysqlPool.query(
-            "SELECT id FROM transport_requests WHERE route_id = ? AND status = 'approved' AND (bus_id IS NULL OR bus_id = '') ORDER BY request_date ASC, id ASC LIMIT ?",
-            [bus.assignedRouteId, slotsLeft]
+            `SELECT tr.id
+             FROM transport_requests tr
+             ${parts.studentJoins}
+             ${parts.expiryJoins}
+             WHERE tr.route_id = ? AND tr.status = 'approved' AND ${parts.activeWhere}
+               AND (tr.bus_id IS NULL OR tr.bus_id = '')
+             ORDER BY tr.request_date ASC, tr.id ASC
+             LIMIT ?`,
+            [...parts.expiryParams, bus.assignedRouteId, slotsLeft]
         );
         const toAssign = unassigned || [];
         for (const row of toAssign) {

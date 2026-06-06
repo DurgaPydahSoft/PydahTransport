@@ -8,6 +8,42 @@ const isMongoId = (id) => mongoose.Types.ObjectId.isValid(id) && String(new mong
 
 const TRANSPORT_FEE_HEAD_CODE = 'TRN01';
 
+function getDefaultAcademicYear() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    if (month >= 6) {
+        return `${year}-${year + 1}`;
+    }
+    return `${year - 1}-${year}`;
+}
+
+function resolveAcademicYear(source) {
+    const fromSource = source?.academicYear || source?.academic_year;
+    return fromSource || process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+}
+
+const STUDENT_JOINS_SQL = `
+    LEFT JOIN students s1 ON tr.admission_number = s1.admission_number
+    LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL`;
+
+function getActivePassengerSqlParts(academicYear) {
+    const ay = academicYear || getDefaultAcademicYear();
+    return {
+        academicYear: ay,
+        studentJoins: STUDENT_JOINS_SQL,
+        expiryJoins: `
+            LEFT JOIN courses c_act ON c_act.name = COALESCE(s1.course, s2.course)
+            LEFT JOIN course_transport_expiry cte ON cte.course_id = c_act.id
+              AND cte.academic_year = ?
+              AND cte.year_of_study = COALESCE(s1.current_year, s2.current_year, tr.year_of_study, 1)`,
+        activeWhere: `(COALESCE(cte.expiry_date, tr.expiry_date) IS NULL OR CURDATE() <= COALESCE(cte.expiry_date, tr.expiry_date))`,
+        effectiveExpiryExpr: `COALESCE(cte.expiry_date, tr.expiry_date)`,
+        isExpiredExpr: `(tr.status = 'approved' AND COALESCE(cte.expiry_date, tr.expiry_date) IS NOT NULL AND CURDATE() > COALESCE(cte.expiry_date, tr.expiry_date))`,
+        expiryParams: [ay],
+    };
+}
+
 // Get the last semester of the student's year (expiry = end of that semester).
 async function getLastSemesterForRequest(mysqlPool, transportRequest) {
     const admissionNumber = transportRequest.admission_number || transportRequest.admission_no;
@@ -50,10 +86,16 @@ async function getBusesWithSeatsForRoute(routeId) {
     let mysqlCountMap = {};
 
     if (mysqlPool) {
+        const parts = getActivePassengerSqlParts(resolveAcademicYear({}));
         const placeholders = busNumbers.map(() => '?').join(',');
         const [countRows] = await mysqlPool.query(
-            `SELECT bus_id AS busNumber, COUNT(*) AS seatsFilled FROM transport_requests WHERE status = 'approved' AND bus_id IN (${placeholders}) GROUP BY bus_id`,
-            busNumbers
+            `SELECT tr.bus_id AS busNumber, COUNT(*) AS seatsFilled
+             FROM transport_requests tr
+             ${parts.studentJoins}
+             ${parts.expiryJoins}
+             WHERE tr.status = 'approved' AND ${parts.activeWhere} AND tr.bus_id IN (${placeholders})
+             GROUP BY tr.bus_id`,
+            [...parts.expiryParams, ...busNumbers]
         );
         mysqlCountMap = Object.fromEntries((countRows || []).map((r) => [r.busNumber, Number(r.seatsFilled)]));
     }
@@ -123,6 +165,7 @@ const getSemesterOptions = async (req, res) => {
             'SELECT course, current_year FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
             [admissionNumber, admissionNumber]
         );
+        const student = studentRows[0] || {};
         const routeId = transportRequest.route_id;
         const routeName = transportRequest.route_name;
         let busesOnRoute = [];
@@ -169,16 +212,20 @@ const getTransportRequests = async (req, res) => {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
         const { route_id, status, bus_id, course, search } = req.query;
+        const parts = getActivePassengerSqlParts(resolveAcademicYear(req.query));
         let sql = `
-            SELECT tr.*, 
+            SELECT tr.*,
                    COALESCE(s1.course, s2.course) as course,
                    COALESCE(s1.branch, s2.branch) as branch,
-                   COALESCE(s1.pin_no, s2.pin_no) as pin_no
-            FROM transport_requests tr 
-            LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
-            LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
+                   COALESCE(s1.pin_no, s2.pin_no) as pin_no,
+                   ${parts.effectiveExpiryExpr} as effective_expiry_date,
+                   cte.expiry_date as course_expiry_date,
+                   ${parts.isExpiredExpr} as is_expired
+            FROM transport_requests tr
+            ${parts.studentJoins}
+            ${parts.expiryJoins}
         `;
-        const params = [];
+        const params = [...parts.expiryParams];
 
         sql += ' WHERE 1=1';
 
@@ -186,7 +233,11 @@ const getTransportRequests = async (req, res) => {
             sql += ' AND tr.route_id = ?';
             params.push(route_id);
         }
-        if (status) {
+        if (status === 'expired') {
+            sql += " AND tr.status = 'approved' AND " + parts.isExpiredExpr;
+        } else if (status === 'active') {
+            sql += " AND tr.status = 'approved' AND " + parts.activeWhere;
+        } else if (status) {
             sql += ' AND tr.status = ?';
             params.push(status);
         }
@@ -252,7 +303,11 @@ const getTransportRequests = async (req, res) => {
             }));
         }
 
-        const combined = [...mysqlRows.map(r => ({ ...r, user_type: 'student' })), ...mongoRows];
+        const combined = [...mysqlRows.map(r => ({
+            ...r,
+            user_type: 'student',
+            is_expired: Boolean(r.is_expired),
+        })), ...mongoRows];
         combined.sort((a, b) => new Date(b.request_date) - new Date(a.request_date));
 
         res.json(combined);
@@ -595,16 +650,6 @@ const rejectTransportRequest = async (req, res) => {
     }
 };
 
-function getDefaultAcademicYear() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0–11; assume July+ is next year start
-    if (month >= 6) {
-        return `${year}-${year + 1}`;
-    }
-    return `${year - 1}-${year}`;
-}
-
 async function updateTransportRequestSemester(mysqlPool, requestId, fields) {
     const {
         semester_id,
@@ -737,31 +782,35 @@ const getDashboardStats = async (req, res) => {
         let courseBreakdown = [];
 
         if (mysqlPool) {
-            // 1. Total Approved Passengers
+            const parts = getActivePassengerSqlParts(resolveAcademicYear(req.query));
+            const activeFrom = `FROM transport_requests tr ${parts.studentJoins} ${parts.expiryJoins}`;
+            const activeWhere = `tr.status = 'approved' AND ${parts.activeWhere}`;
+            const activeParams = [...parts.expiryParams];
+
             const [totalRows] = await mysqlPool.query(
-                "SELECT COUNT(*) as total FROM transport_requests WHERE status = 'approved'"
+                `SELECT COUNT(*) as total ${activeFrom} WHERE ${activeWhere}`,
+                activeParams
             );
             totalPassengers += totalRows[0].total;
 
-            // 2. Route-wise Passenger Counts
             const [routeRows] = await mysqlPool.query(
-                "SELECT route_id, route_name, COUNT(*) as count FROM transport_requests WHERE status = 'approved' GROUP BY route_id, route_name"
+                `SELECT tr.route_id, tr.route_name, COUNT(*) as count ${activeFrom} WHERE ${activeWhere} GROUP BY tr.route_id, tr.route_name`,
+                activeParams
             );
             routeBreakdown = routeRows;
 
-            // 3. Stage-wise Passenger Counts
             const [stageRows] = await mysqlPool.query(
-                "SELECT route_id, route_name, stage_name, COUNT(*) as count FROM transport_requests WHERE status = 'approved' GROUP BY route_id, route_name, stage_name"
+                `SELECT tr.route_id, tr.route_name, tr.stage_name, COUNT(*) as count ${activeFrom} WHERE ${activeWhere} GROUP BY tr.route_id, tr.route_name, tr.stage_name`,
+                activeParams
             );
             stageBreakdown = stageRows;
 
-            // 4. Course-wise Passenger Counts
             const [courseRows] = await mysqlPool.query(
-                `SELECT s.course, COUNT(tr.id) as count 
-                 FROM transport_requests tr 
-                 JOIN students s ON (tr.admission_number = s.admission_number OR tr.admission_number = s.admission_no)
-                 WHERE tr.status = 'approved' 
-                 GROUP BY s.course`
+                `SELECT COALESCE(s1.course, s2.course) as course, COUNT(tr.id) as count
+                 ${activeFrom}
+                 WHERE ${activeWhere}
+                 GROUP BY COALESCE(s1.course, s2.course)`,
+                activeParams
             );
             courseBreakdown = courseRows;
         }
@@ -1153,17 +1202,18 @@ const getApprovedPassengers = async (req, res) => {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
 
+        const parts = getActivePassengerSqlParts(resolveAcademicYear(req.query));
         let sql = `
             SELECT tr.id, tr.admission_number, tr.student_name, tr.route_id, tr.route_name, tr.stage_name, tr.fare, tr.year_of_study,
                    COALESCE(s1.course, s2.course) as course,
                    COALESCE(s1.branch, s2.branch) as branch,
                    COALESCE(s1.pin_no, s2.pin_no) as pin_no
             FROM transport_requests tr
-            LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
-            LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
-            WHERE tr.status = 'approved'
+            ${parts.studentJoins}
+            ${parts.expiryJoins}
+            WHERE tr.status = 'approved' AND ${parts.activeWhere}
         `;
-        const params = [];
+        const params = [...parts.expiryParams];
 
         if (q) {
             sql += ' AND (tr.student_name LIKE ? OR tr.admission_number LIKE ?)';
@@ -1314,5 +1364,8 @@ module.exports = {
     deleteConcession,
     getApprovedPassengers,
     submitRouteChangeRequest,
-    getPassengerFullDetails
+    getPassengerFullDetails,
+    getDefaultAcademicYear,
+    resolveAcademicYear,
+    getActivePassengerSqlParts,
 };
