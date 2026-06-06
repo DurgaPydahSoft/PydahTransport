@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS transport_requests (
 );
 
 -- Add semester/expiry columns: run alter-transport-requests-semester.sql when semesters table exists.
+-- Adds academic_year VARCHAR(20) for session label at raise time (e.g. 2024-2025).
 
 -- Course + year-of-study transport expiry (overrides semester expiry for that course/year in an academic year)
 CREATE TABLE IF NOT EXISTS course_transport_expiry (

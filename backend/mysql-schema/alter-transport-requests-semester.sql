@@ -13,6 +13,9 @@ ALTER TABLE transport_requests
   ADD COLUMN year_of_study TINYINT NULL,
   ADD COLUMN semester_number TINYINT NULL;
 
+-- Academic session label stored when request is raised (e.g. 2024-2025)
+-- ALTER TABLE transport_requests ADD COLUMN academic_year VARCHAR(20) NULL COMMENT 'Academic session e.g. 2024-2025' AFTER year_of_study;
+
 -- If you already ran the ALTER above without expiry_date, add it with:
 -- ALTER TABLE transport_requests ADD COLUMN expiry_date DATE NULL COMMENT 'Transport valid until (semester end for that year/sem)' AFTER semester_end_date;
 

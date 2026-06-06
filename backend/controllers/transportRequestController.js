@@ -462,7 +462,7 @@ const approveTransportRequest = async (req, res) => {
             });
         }
 
-        const resolvedAcademicYear = academicYear || process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+        const resolvedAcademicYear = academicYear || request.academic_year || process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
         if (!resolvedAcademicYear) {
             return res.status(400).json({
                 message: 'Academic year is required. Set CURRENT_ACADEMIC_YEAR in env or send academicYear in request body (e.g. "2024-2025").',
@@ -700,8 +700,12 @@ const createTransportRequest = async (req, res) => {
         fare,
         raised_by = 'student',
         raised_by_id = null,
-        user_type = 'student'
+        user_type = 'student',
+        academic_year,
+        academicYear,
     } = req.body;
+
+    const resolvedAcademicYear = resolveAcademicYear({ academic_year, academicYear });
 
     try {
         if (user_type === 'employee') {
@@ -714,7 +718,8 @@ const createTransportRequest = async (req, res) => {
                 fare: 0,
                 status: 'pending',
                 raised_by,
-                raised_by_id
+                raised_by_id,
+                academic_year: resolvedAcademicYear,
             });
             await newReq.save();
             return res.status(201).json({
@@ -726,6 +731,7 @@ const createTransportRequest = async (req, res) => {
                 stage_name: newReq.stage_name,
                 fare: newReq.fare,
                 status: newReq.status,
+                academic_year: newReq.academic_year,
                 user_type: 'employee',
                 request_date: newReq.created_at
             });
@@ -748,8 +754,8 @@ const createTransportRequest = async (req, res) => {
 
         const sql = `
             INSERT INTO transport_requests 
-            (admission_number, student_name, route_id, route_name, stage_name, fare, raised_by, raised_by_id, status, year_of_study)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+            (admission_number, student_name, route_id, route_name, stage_name, fare, raised_by, raised_by_id, status, year_of_study, academic_year)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
         `;
         const [result] = await mysqlPool.query(sql, [
             admission_number,
@@ -760,12 +766,18 @@ const createTransportRequest = async (req, res) => {
             fare,
             raised_by,
             raised_by_id,
-            yearOfStudy
+            yearOfStudy,
+            resolvedAcademicYear,
         ]);
 
         const [newRequest] = await mysqlPool.query('SELECT * FROM transport_requests WHERE id = ?', [result.insertId]);
         res.status(201).json(newRequest[0]);
     } catch (error) {
+        if (error.code === 'ER_BAD_FIELD_ERROR' && String(error.message).includes('academic_year')) {
+            return res.status(503).json({
+                message: 'Column academic_year not found on transport_requests. Run: ALTER TABLE transport_requests ADD COLUMN academic_year VARCHAR(20) NULL AFTER year_of_study;',
+            });
+        }
         console.error('Error creating transport request:', error);
         res.status(500).json({ message: error.message });
     }

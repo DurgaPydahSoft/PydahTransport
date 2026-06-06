@@ -42,6 +42,10 @@ const employeeTransportRequestSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    academic_year: {
+        type: String,
+        default: null
+    },
     request_date: {
         type: Date,
         default: Date.now

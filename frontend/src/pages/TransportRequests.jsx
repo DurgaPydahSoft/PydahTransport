@@ -637,6 +637,7 @@ const TransportRequests = () => {
                                     <th className="p-4">Name</th>
                                     <th className="p-4">Course</th>
                                     <th className="p-4 text-center">Year</th>
+                                    <th className="p-4">Academic Year</th>
                                     <th className="p-4">Route</th>
                                     <th className="p-4">Stage</th>
                                     <th className="p-4">Fare</th>
@@ -663,6 +664,7 @@ const TransportRequests = () => {
                                                 </span>
                                             )}
                                         </td>
+                                        <td className="p-4 text-xs font-medium text-gray-600">{req.academic_year || '—'}</td>
                                         <td className="p-4">{req.route_name}</td>
                                         <td className="p-4">{req.stage_name}</td>
                                         <td className="p-4 font-medium text-gray-900">{req.user_type === 'employee' ? 'Free (₹0)' : `₹${req.fare}`}</td>

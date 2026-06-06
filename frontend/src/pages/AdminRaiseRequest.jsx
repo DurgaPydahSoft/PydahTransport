@@ -5,6 +5,23 @@ import Loader from '../components/Loader';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+const getDefaultAcademicYear = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    return now.getMonth() >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+};
+
+const getAcademicYearOptions = () => {
+    const defaultYear = getDefaultAcademicYear();
+    const startYear = Number(defaultYear.split('-')[0]);
+    const options = [];
+    for (let offset = -3; offset <= 3; offset += 1) {
+        const start = startYear + offset;
+        options.push(`${start}-${start + 1}`);
+    }
+    return options;
+};
+
 const AdminRaiseRequest = () => {
     const [activeTab, setActiveTab] = useState('new'); // 'new' or 'change'
     const [changeType, setChangeType] = useState('route'); // 'route' or 'stage'
@@ -19,6 +36,8 @@ const AdminRaiseRequest = () => {
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
+    const [academicYear, setAcademicYear] = useState(getDefaultAcademicYear);
+    const academicYearOptions = getAcademicYearOptions();
 
     // Get logged in admin info
     const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
@@ -136,7 +155,8 @@ const AdminRaiseRequest = () => {
                 fare: selectedStage.fare,
                 raised_by: 'admin',
                 raised_by_id: admin.id,
-                user_type: userType
+                user_type: userType,
+                academic_year: academicYear,
             };
 
             const response = await fetch(endpoint, {
@@ -367,6 +387,24 @@ const AdminRaiseRequest = () => {
                             </div>
 
                             <div className="space-y-4">
+                                {activeTab === 'new' && (
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
+                                            Academic Year
+                                        </label>
+                                        <select
+                                            value={academicYear}
+                                            onChange={(e) => setAcademicYear(e.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700 appearance-none bg-white"
+                                            required
+                                        >
+                                            {academicYearOptions.map((year) => (
+                                                <option key={year} value={year}>{year}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
                                 <div>
                                     <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
                                         {changeType === 'stage' ? 'Current Route (Locked)' : 'Assign New Route'}

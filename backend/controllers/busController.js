@@ -26,6 +26,7 @@ const getBusDetails = async (req, res) => {
                         COALESCE(s1.course, s2.course) as course,
                         COALESCE(s1.branch, s2.branch) as branch,
                         COALESCE(s1.current_year, s2.current_year, tr.year_of_study) as year_of_study,
+                        tr.academic_year,
                         COALESCE(s1.pin_no, s2.pin_no) as pin_no,
                         ${parts.effectiveExpiryExpr} as effective_expiry_date,
                         ${parts.isExpiredExpr} as is_expired
@@ -39,7 +40,7 @@ const getBusDetails = async (req, res) => {
             mysqlPassengers = rows.map(r => ({
                 ...r,
                 user_type: 'student',
-                academic_year: academicYear,
+                academic_year: r.academic_year || academicYear,
                 year_of_study: r.year_of_study != null ? Number(r.year_of_study) : null,
                 is_expired: Boolean(r.is_expired),
             }));
@@ -57,7 +58,7 @@ const getBusDetails = async (req, res) => {
             user_type: 'employee',
             bus_id: r.bus_id,
             course: 'Employee',
-            academic_year: null,
+            academic_year: r.academic_year || null,
             year_of_study: null,
         }));
 
