@@ -11,7 +11,6 @@ const protect = async (req, res, next) => {
     ) {
         try {
             token = req.headers.authorization.split(' ')[1];
-            console.log('Verifying token:', token ? `${token.substring(0, 10)}...` : 'null/undefined');
 
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
@@ -46,16 +45,14 @@ const protect = async (req, res, next) => {
                 req.user.permissions = userRole ? userRole.permissions : [];
             }
 
-            next();
+            return next();
         } catch (error) {
             console.error('JWT Verification Error:', error);
-            res.status(401).json({ message: 'Not authorized, token failed' });
+            return res.status(401).json({ message: 'Not authorized, token failed' });
         }
     }
 
-    if (!token) {
-        res.status(401).json({ message: 'Not authorized, no token' });
-    }
+    return res.status(401).json({ message: 'Not authorized, no token' });
 };
 
 const admin = (req, res, next) => {

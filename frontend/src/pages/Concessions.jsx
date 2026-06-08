@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import Loader from '../components/Loader';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { apiFetch, API_BASE } from '../utils/api';
 
 const Concessions = () => {
     const [concessions, setConcessions] = useState([]);
@@ -30,8 +29,8 @@ const Concessions = () => {
     const fetchMetadata = async () => {
         try {
             const [coursesRes, routesRes] = await Promise.all([
-                fetch(`${API_BASE}/students/courses`),
-                fetch(`${API_BASE}/routes`)
+                apiFetch(`${API_BASE}/students/courses`),
+                apiFetch(`${API_BASE}/routes`)
             ]);
             setCourses(await coursesRes.json());
             setRoutes(await routesRes.json());
@@ -44,7 +43,7 @@ const Concessions = () => {
         setLoading(true);
         try {
             const query = new URLSearchParams(filters).toString();
-            const response = await fetch(`${API_BASE}/transport-requests/concessions?${query}`);
+            const response = await apiFetch(`${API_BASE}/transport-requests/concessions?${query}`);
             const result = await response.json();
             setConcessions(result.data || []);
             setPagination(result.pagination || { total: 0, pages: 0, currentPage: 1 });
@@ -72,7 +71,7 @@ const Concessions = () => {
         
         setUpdating(concession.id);
         try {
-            const response = await fetch(`${API_BASE}/transport-requests/${concession.id}/concession`, {
+            const response = await apiFetch(`${API_BASE}/transport-requests/${concession.id}/concession`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -105,7 +104,7 @@ const Concessions = () => {
 
         setUpdating(concessionId);
         try {
-            const response = await fetch(`${API_BASE}/transport-requests/${concessionId}/concession`, {
+            const response = await apiFetch(`${API_BASE}/transport-requests/${concessionId}/concession`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

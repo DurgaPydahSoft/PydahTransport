@@ -11,21 +11,22 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const { protect } = require('./middleware/authMiddleware');
 const busRoutes = require('./routes/busRoutes');
 const routeRoutes = require('./routes/routeRoutes');
 const authRoutes = require('./routes/authRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 
-// Routes
-app.use('/api/buses', busRoutes);
-app.use('/api/routes', routeRoutes);
+// Public auth only; all other /api routes require a valid JWT
 app.use('/api/auth', authRoutes);
+app.use('/api/buses', protect, busRoutes);
+app.use('/api/routes', protect, routeRoutes);
 app.use('/api/employees', employeeRoutes);
-app.use('/api/transport-requests', require('./routes/transportRequestRoutes'));
-app.use('/api/transport-dues', require('./routes/transportDuesRoutes'));
+app.use('/api/transport-requests', protect, require('./routes/transportRequestRoutes'));
+app.use('/api/transport-dues', protect, require('./routes/transportDuesRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/students', require('./routes/studentRoutes'));
-app.use('/api/inventory', require('./routes/inventoryRoutes'));
+app.use('/api/students', protect, require('./routes/studentRoutes'));
+app.use('/api/inventory', protect, require('./routes/inventoryRoutes'));
 
 app.get('/', (req, res) => {
     res.json({ message: 'Pydah Transport API is running' });

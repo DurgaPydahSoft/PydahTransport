@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-
-const API = import.meta.env.VITE_API_URL || '';
+import { apiFetch, API_BASE } from '../utils/api';
 
 function getAcademicYearOptions() {
     const years = [];
@@ -27,7 +26,7 @@ const TransportDues = () => {
         if (!academicYear) return;
         setLoading(true);
         setError('');
-        fetch(`${API}/transport-dues?academicYear=${encodeURIComponent(academicYear)}&onlyUnpaid=1`)
+        apiFetch(`${API_BASE}/transport-dues?academicYear=${encodeURIComponent(academicYear)}&onlyUnpaid=1`)
             .then((res) => res.json())
             .then((json) => {
                 if (json.message && !json.dues) {

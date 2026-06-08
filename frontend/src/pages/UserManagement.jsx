@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
+import { apiFetch } from '../utils/api';
 
 const UserManagement = () => {
     const [users, setUsers] = useState([]);
@@ -46,7 +47,7 @@ const UserManagement = () => {
         }
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/users`, {
+            const response = await apiFetch(`${import.meta.env.VITE_API_URL}/users`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -78,7 +79,7 @@ const UserManagement = () => {
 
         setIsSearching(true);
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/users/search?q=${query}`, {
+            const response = await apiFetch(`${import.meta.env.VITE_API_URL}/users/search?q=${query}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -133,7 +134,7 @@ const UserManagement = () => {
         if (!token) return;
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/users/${user._id}/role`, {
+            const response = await apiFetch(`${import.meta.env.VITE_API_URL}/users/${user._id}/role`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -164,7 +165,7 @@ const UserManagement = () => {
         console.log('[Frontend] Target ID:', targetId);
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/users/${targetId}/role`, {
+            const response = await apiFetch(`${import.meta.env.VITE_API_URL}/users/${targetId}/role`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

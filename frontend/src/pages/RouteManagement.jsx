@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import Loader from '../components/Loader';
+import { apiFetch } from '../utils/api';
 import {
     Map,
     Edit,
@@ -38,7 +39,7 @@ const RouteManagement = () => {
     const fetchRoutes = async () => {
         setLoading(true);
         try {
-            const response = await fetch(`${API}/routes`);
+            const response = await apiFetch(`${API}/routes`);
             const data = await response.json();
             setRoutes(data);
         } catch (error) {
@@ -103,7 +104,7 @@ const RouteManagement = () => {
         if (!window.confirm('Are you sure you want to delete this route?')) return;
 
         try {
-            const response = await fetch(`${API}/routes/${id}`, {
+            const response = await apiFetch(`${API}/routes/${id}`, {
                 method: 'DELETE'
             });
 
@@ -136,7 +137,7 @@ const RouteManagement = () => {
 
             const method = editingId ? 'PUT' : 'POST';
 
-            const response = await fetch(url, {
+            const response = await apiFetch(url, {
                 method: method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)

@@ -5,8 +5,7 @@ import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import BusPassCard from '../components/BusPassCard';
 import Loader from '../components/Loader';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { apiFetch, API_BASE } from '../utils/api';
 
 const statusDisplay = (s) => (s || 'pending').charAt(0).toUpperCase() + (s || 'pending').slice(1);
 
@@ -68,7 +67,7 @@ const TransportRequests = () => {
         if (fetchingPass) return;
         setFetchingPass(true);
         try {
-            const response = await fetch(`${API_BASE}/transport-requests/${p.id}/full-details`);
+            const response = await apiFetch(`${API_BASE}/transport-requests/${p.id}/full-details`);
             if (response.ok) {
                 const fullPassenger = await response.json();
                 setSelectedPassPassenger(fullPassenger);
@@ -96,7 +95,7 @@ const TransportRequests = () => {
 
             url += params.toString();
 
-            const response = await fetch(url);
+            const response = await apiFetch(url);
             if (response.ok) {
                 const data = await response.json();
                 setRequests(data);
@@ -112,7 +111,7 @@ const TransportRequests = () => {
 
     const fetchRoutes = async () => {
         try {
-            const response = await fetch(`${API_BASE}/routes`);
+            const response = await apiFetch(`${API_BASE}/routes`);
             if (response.ok) {
                 const data = await response.json();
                 setRoutes(Array.isArray(data) ? data : []);
@@ -124,7 +123,7 @@ const TransportRequests = () => {
 
     const fetchCourses = async () => {
         try {
-            const response = await fetch(`${API_BASE}/students/courses`);
+            const response = await apiFetch(`${API_BASE}/students/courses`);
             if (response.ok) {
                 const data = await response.json();
                 setCourses(data);
@@ -137,7 +136,7 @@ const TransportRequests = () => {
     const fetchCourseExpiry = async () => {
         setCourseExpiryLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/students/course-expiry?academicYear=${encodeURIComponent(academicYear)}`);
+            const response = await apiFetch(`${API_BASE}/students/course-expiry?academicYear=${encodeURIComponent(academicYear)}`);
             const data = await response.json();
             if (response.ok) {
                 setCourseExpiryList(data.courses || []);
@@ -171,7 +170,7 @@ const TransportRequests = () => {
         const saveKey = courseExpiryKey(courseId, yearOfStudy);
         setCourseExpirySaving(saveKey);
         try {
-            const response = await fetch(`${API_BASE}/students/course-expiry`, {
+            const response = await apiFetch(`${API_BASE}/students/course-expiry`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -206,7 +205,7 @@ const TransportRequests = () => {
         const saveKey = courseExpiryKey(courseId, yearOfStudy);
         setCourseExpirySaving(saveKey);
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `${API_BASE}/students/course-expiry/${courseId}?academicYear=${encodeURIComponent(academicYear)}&yearOfStudy=${yearOfStudy}`,
                 { method: 'DELETE' }
             );
@@ -345,7 +344,7 @@ const TransportRequests = () => {
     const openApproveModal = async (requestId) => {
         setApproveModal({ open: true, requestId, data: null, selectedBusId: '', loading: true, error: null });
         try {
-            const response = await fetch(`${API_BASE}/transport-requests/${requestId}/semester-options`);
+            const response = await apiFetch(`${API_BASE}/transport-requests/${requestId}/semester-options`);
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
                 let defaultBusId = '';
@@ -377,7 +376,7 @@ const TransportRequests = () => {
         setActionLoading(id);
         setMessage({ text: '', type: '' });
         try {
-            const response = await fetch(`${API_BASE}/transport-requests/${id}/approve`, {
+            const response = await apiFetch(`${API_BASE}/transport-requests/${id}/approve`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ bus_id: approveModal.selectedBusId || null }),
@@ -405,7 +404,7 @@ const TransportRequests = () => {
         setActionLoading(id);
         setMessage({ text: '', type: '' });
         try {
-            const response = await fetch(`${API_BASE}/transport-requests/${id}/reject`, {
+            const response = await apiFetch(`${API_BASE}/transport-requests/${id}/reject`, {
                 method: 'PATCH',
             });
             const data = await response.json().catch(() => ({}));
@@ -430,7 +429,7 @@ const TransportRequests = () => {
         setActionLoading(id);
         setMessage({ text: '', type: '' });
         try {
-            const response = await fetch(`${API_BASE}/transport-requests/${id}`, {
+            const response = await apiFetch(`${API_BASE}/transport-requests/${id}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

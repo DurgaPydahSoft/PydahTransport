@@ -4,6 +4,7 @@ import { useReactToPrint } from 'react-to-print';
 import PassengerReport from '../components/PassengerReport';
 import Layout from '../components/Layout';
 import Loader from '../components/Loader';
+import { apiFetch } from '../utils/api';
 import {
     Bus,
     MapPin,
@@ -39,7 +40,7 @@ const Fleet = () => {
     const handleDownloadReport = async () => {
         setIsPrinting(true);
         try {
-            const response = await fetch(`${API}/transport-requests?status=active`);
+            const response = await apiFetch(`${API}/transport-requests?status=active`);
             if (response.ok) {
                 const data = await response.json();
                 setPrintPassengers(data);
@@ -65,7 +66,7 @@ const Fleet = () => {
     const fetchOverview = async () => {
         setLoading(true);
         try {
-            const response = await fetch(`${API}/buses/overview`);
+            const response = await apiFetch(`${API}/buses/overview`);
             if (response.ok) {
                 const data = await response.json();
                 setList(Array.isArray(data) ? data : []);
@@ -87,7 +88,7 @@ const Fleet = () => {
         setAllocatingId(busId);
         setMessage({ text: '', type: '' });
         try {
-            const response = await fetch(`${API}/buses/${busId}/auto-allocate`, { method: 'POST' });
+            const response = await apiFetch(`${API}/buses/${busId}/auto-allocate`, { method: 'POST' });
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
                 setMessage({ text: data.message || 'Allocation done.', type: 'success' });

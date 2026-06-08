@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import Layout from '../components/Layout';
 import Loader from '../components/Loader';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { apiFetch, API_BASE } from '../utils/api';
 
 const getDefaultAcademicYear = () => {
     const now = new Date();
@@ -50,7 +49,7 @@ const AdminRaiseRequest = () => {
     useEffect(() => {
         const fetchRoutes = async () => {
             try {
-                const response = await fetch(`${API_BASE}/routes`);
+                const response = await apiFetch(`${API_BASE}/routes`);
                 const data = await response.json();
                 setRoutes(data);
             } catch (error) {
@@ -81,13 +80,7 @@ const AdminRaiseRequest = () => {
                 ? (userType === 'employee' ? `${API_BASE}/employees/search?q=${encodeURIComponent(searchQuery)}` : `${API_BASE}/students/search?q=${encodeURIComponent(searchQuery)}`)
                 : `${API_BASE}/transport-requests/approved-passengers?q=${encodeURIComponent(searchQuery)}&user_type=${userType}`;
             
-            const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
-            const response = await fetch(endpoint, {
-                headers: {
-                    'Authorization': `Bearer ${adminInfo.token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            const response = await apiFetch(endpoint);
             const data = await response.json();
             
             if (activeTab === 'new') {
@@ -159,9 +152,8 @@ const AdminRaiseRequest = () => {
                 academic_year: academicYear,
             };
 
-            const response = await fetch(endpoint, {
+            const response = await apiFetch(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
 

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import Loader from '../components/Loader';
+import { apiFetch } from '../utils/api';
 import {
     Bus,
     Users,
@@ -48,7 +49,7 @@ const BusManagement = () => {
 
     const fetchBuses = async () => {
         try {
-            const response = await fetch(`${API}/buses`);
+            const response = await apiFetch(`${API}/buses`);
             const data = await response.json();
             setBuses(data);
         } catch (error) {
@@ -60,7 +61,7 @@ const BusManagement = () => {
 
     const fetchRoutes = async () => {
         try {
-            const response = await fetch(`${API}/routes`);
+            const response = await apiFetch(`${API}/routes`);
             const data = await response.json();
             setRoutes(data);
         } catch (error) {
@@ -80,7 +81,7 @@ const BusManagement = () => {
                 return;
             }
 
-            const response = await fetch(`${API}/employees/drivers`, {
+            const response = await apiFetch(`${API}/employees/drivers`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -106,7 +107,7 @@ const BusManagement = () => {
                 return;
             }
 
-            const response = await fetch(`${API}/employees/cleaners`, {
+            const response = await apiFetch(`${API}/employees/cleaners`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -131,7 +132,7 @@ const BusManagement = () => {
     const handleAssignRoute = async (busId, routeId) => {
         setAssigningBusId(busId);
         try {
-            const response = await fetch(`${API}/buses/${busId}`, {
+            const response = await apiFetch(`${API}/buses/${busId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ assignedRouteId: routeId || null }),
@@ -171,7 +172,7 @@ const BusManagement = () => {
         if (!window.confirm('Are you sure you want to delete this bus?')) return;
 
         try {
-            const response = await fetch(`${API}/buses/${id}`, {
+            const response = await apiFetch(`${API}/buses/${id}`, {
                 method: 'DELETE'
             });
 
@@ -208,7 +209,7 @@ const BusManagement = () => {
 
             const method = editingId ? 'PUT' : 'POST';
 
-            const response = await fetch(url, {
+            const response = await apiFetch(url, {
                 method: method,
                 headers: {
                     'Content-Type': 'application/json'

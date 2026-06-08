@@ -8,8 +8,9 @@ import {
     ChevronUp, LayoutGrid, List, AlertCircle, Filter 
 } from 'lucide-react';
 import BillPrint from '../components/BillPrint';
+import { apiFetch, API_BASE } from '../utils/api';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = API_BASE;
 
 const TABS = { inventory: 'inventory', history: 'history', vendors: 'vendors', tyreRegistry: 'tyreRegistry' };
 
@@ -164,7 +165,7 @@ const Inventory = () => {
     const fetchItems = async () => {
         setLoading(true);
         try {
-            const response = await fetch(`${API}/inventory`);
+            const response = await apiFetch(`${API}/inventory`);
             const data = await response.json();
             setItems(Array.isArray(data) ? data : []);
         } catch (error) {
@@ -176,7 +177,7 @@ const Inventory = () => {
 
     const fetchBuses = async () => {
         try {
-            const response = await fetch(`${API}/buses`);
+            const response = await apiFetch(`${API}/buses`);
             const data = await response.json();
             setBuses(data);
         } catch (error) {
@@ -187,7 +188,7 @@ const Inventory = () => {
     const fetchVendors = async () => {
         setVendorsLoading(true);
         try {
-            const response = await fetch(`${API}/inventory/vendors`);
+            const response = await apiFetch(`${API}/inventory/vendors`);
             const data = await response.json();
             setVendors(Array.isArray(data) ? data : []);
         } catch (error) {
@@ -201,7 +202,7 @@ const Inventory = () => {
         setRegistryLoading(true);
         try {
             const url = busId === 'all' ? `${API}/inventory/tyre-registry` : `${API}/inventory/tyre-registry/${busId}`;
-            const response = await fetch(url);
+            const response = await apiFetch(url);
             const data = await response.json();
             setTyreRegistry(Array.isArray(data) ? data : []);
         } catch (error) {
@@ -215,7 +216,7 @@ const Inventory = () => {
         setHistoryLoading(true);
         try {
             const url = busId === 'all' ? `${API}/inventory/history` : `${API}/inventory/history/${busId}`;
-            const response = await fetch(url);
+            const response = await apiFetch(url);
             const data = await response.json();
             setHistory(Array.isArray(data) ? data : []);
         } catch (error) {
@@ -231,7 +232,7 @@ const Inventory = () => {
         const method = editingItem ? 'PUT' : 'POST';
 
         try {
-            const response = await fetch(url, {
+            const response = await apiFetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(itemFormData)
@@ -254,7 +255,7 @@ const Inventory = () => {
         const method = editingVendor ? 'PUT' : 'POST';
 
         try {
-            const response = await fetch(url, {
+            const response = await apiFetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(vendorFormData)
@@ -286,7 +287,7 @@ const Inventory = () => {
         };
 
         try {
-            const response = await fetch(`${API}/inventory/raise-bill`, {
+            const response = await apiFetch(`${API}/inventory/raise-bill`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -326,7 +327,7 @@ const Inventory = () => {
     const handleDeleteItem = async (id) => {
         if (!window.confirm('Are you sure you want to delete this item?')) return;
         try {
-            const response = await fetch(`${API}/inventory/${id}`, { method: 'DELETE' });
+            const response = await apiFetch(`${API}/inventory/${id}`, { method: 'DELETE' });
             if (response.ok) {
                 fetchItems();
             } else {

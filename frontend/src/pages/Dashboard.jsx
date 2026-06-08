@@ -8,6 +8,7 @@ import {
     Bell,
     Zap
 } from 'lucide-react';
+import { apiFetch } from '../utils/api';
 
 const Dashboard = () => {
     const [loading, setLoading] = useState(true);
@@ -26,9 +27,9 @@ const Dashboard = () => {
         const fetchStats = async () => {
             try {
                 const [busRes, routeRes, statsRes] = await Promise.all([
-                    fetch(`${import.meta.env.VITE_API_URL}/buses`),
-                    fetch(`${import.meta.env.VITE_API_URL}/routes`),
-                    fetch(`${import.meta.env.VITE_API_URL}/transport-requests/stats`)
+                    apiFetch(`${import.meta.env.VITE_API_URL}/buses`),
+                    apiFetch(`${import.meta.env.VITE_API_URL}/routes`),
+                    apiFetch(`${import.meta.env.VITE_API_URL}/transport-requests/stats`)
                 ]);
 
                 const buses = await busRes.json();

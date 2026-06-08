@@ -7,8 +7,9 @@ import Modal from '../components/Modal';
 import PassengerReport from '../components/PassengerReport';
 import BusPassCard from '../components/BusPassCard';
 import Loader from '../components/Loader';
+import { apiFetch, API_BASE } from '../utils/api';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = API_BASE;
 
 const getDefaultAcademicYear = () => {
     const now = new Date();
@@ -59,7 +60,7 @@ const BusDetails = () => {
         if (fetchingPass) return;
         setFetchingPass(true);
         try {
-            const response = await fetch(`${API}/transport-requests/${p.id}/full-details`);
+            const response = await apiFetch(`${API}/transport-requests/${p.id}/full-details`);
             if (response.ok) {
                 const fullPassenger = await response.json();
                 setSelectedPassPassenger(fullPassenger);
@@ -80,7 +81,7 @@ const BusDetails = () => {
             if (!data?.bus?.busNumber) return;
             setInventoryLoading(true);
             try {
-                const response = await fetch(`${API}/inventory/history/${data.bus.busNumber}`);
+                const response = await apiFetch(`${API}/inventory/history/${data.bus.busNumber}`);
                 if (response.ok) {
                     const json = await response.json();
                     setInventoryHistory(json);
@@ -102,7 +103,7 @@ const BusDetails = () => {
             if (!id) return;
             setLoading(true);
             try {
-                const response = await fetch(
+                const response = await apiFetch(
                     `${API}/buses/${id}/details?academicYear=${encodeURIComponent(academicYear)}`
                 );
                 if (response.ok) {
@@ -129,7 +130,7 @@ const BusDetails = () => {
             return;
         }
         try {
-            const response = await fetch(
+            const response = await apiFetch(
                 `${API}/transport-requests?route_id=${encodeURIComponent(data.bus.assignedRouteId)}&status=active&bus_id=unassigned`
             );
             const list = await response.json();
@@ -144,14 +145,14 @@ const BusDetails = () => {
         setAssignLoading(true);
         try {
             for (const reqId of selectedIds) {
-                await fetch(`${API}/transport-requests/${reqId}`, {
+                await apiFetch(`${API}/transport-requests/${reqId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ bus_id: data.bus.busNumber }),
                 });
             }
             setAssignModalOpen(false);
-            const res = await fetch(
+            const res = await apiFetch(
                 `${API}/buses/${id}/details?academicYear=${encodeURIComponent(academicYear)}`
             );
             if (res.ok) setData(await res.json());

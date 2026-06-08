@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -21,17 +22,17 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/buses" element={<BusManagement />} />
-          <Route path="/buses/:id" element={<BusDetails />} />
-          <Route path="/fleet" element={<Fleet />} />
-          <Route path="/routes" element={<RouteManagement />} />
-          <Route path="/transport-requests" element={<TransportRequests />} />
-          <Route path="/transport-dues" element={<TransportDues />} />
-          <Route path="/users" element={<UserManagement />} />
-          <Route path="/raise-request" element={<AdminRaiseRequest />} />
-          <Route path="/concessions" element={<Concessions />} />
-          <Route path="/inventory" element={<Inventory />} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/buses" element={<ProtectedRoute><BusManagement /></ProtectedRoute>} />
+          <Route path="/buses/:id" element={<ProtectedRoute><BusDetails /></ProtectedRoute>} />
+          <Route path="/fleet" element={<ProtectedRoute><Fleet /></ProtectedRoute>} />
+          <Route path="/routes" element={<ProtectedRoute><RouteManagement /></ProtectedRoute>} />
+          <Route path="/transport-requests" element={<ProtectedRoute><TransportRequests /></ProtectedRoute>} />
+          <Route path="/transport-dues" element={<ProtectedRoute><TransportDues /></ProtectedRoute>} />
+          <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+          <Route path="/raise-request" element={<ProtectedRoute><AdminRaiseRequest /></ProtectedRoute>} />
+          <Route path="/concessions" element={<ProtectedRoute><Concessions /></ProtectedRoute>} />
+          <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
         </Routes>
       </div>
     </Router>
