@@ -4,7 +4,6 @@ import { useReactToPrint } from 'react-to-print';
 import PassengerReport from '../components/PassengerReport';
 import Layout from '../components/Layout';
 import Loader from '../components/Loader';
-import { apiFetch } from '../utils/api';
 import {
     Bus,
     MapPin,
@@ -17,11 +16,32 @@ import {
     Loader2
 } from 'lucide-react';
 
-const API = import.meta.env.VITE_API_URL || '';
+import { apiFetch, API_BASE } from '../utils/api';
+
+const API = API_BASE;
+
+const getDefaultAcademicYear = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    return now.getMonth() >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+};
+
+const getAcademicYearOptions = () => {
+    const defaultYear = getDefaultAcademicYear();
+    const startYear = Number(defaultYear.split('-')[0]);
+    const options = [];
+    for (let offset = -3; offset <= 3; offset += 1) {
+        const start = startYear + offset;
+        options.push(`${start}-${start + 1}`);
+    }
+    return options;
+};
 
 const Fleet = () => {
     const [list, setList] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [academicYear, setAcademicYear] = useState(getDefaultAcademicYear);
+    const academicYearOptions = getAcademicYearOptions();
     const [allocatingId, setAllocatingId] = useState(null);
     const [message, setMessage] = useState({ text: '', type: '' });
     
@@ -40,7 +60,9 @@ const Fleet = () => {
     const handleDownloadReport = async () => {
         setIsPrinting(true);
         try {
-            const response = await apiFetch(`${API}/transport-requests?status=active`);
+            const response = await apiFetch(
+                `${API}/transport-requests?status=approved&academicYear=${encodeURIComponent(academicYear)}`
+            );
             if (response.ok) {
                 const data = await response.json();
                 setPrintPassengers(data);
@@ -66,10 +88,13 @@ const Fleet = () => {
     const fetchOverview = async () => {
         setLoading(true);
         try {
-            const response = await apiFetch(`${API}/buses/overview`);
+            const response = await apiFetch(
+                `${API}/buses/overview?academicYear=${encodeURIComponent(academicYear)}`
+            );
             if (response.ok) {
                 const data = await response.json();
-                setList(Array.isArray(data) ? data : []);
+                const rows = Array.isArray(data) ? data : (data.buses || []);
+                setList(rows);
             } else {
                 setList([]);
             }
@@ -82,13 +107,16 @@ const Fleet = () => {
 
     useEffect(() => {
         fetchOverview();
-    }, []);
+    }, [academicYear]);
 
     const handleAutoAllocate = async (busId) => {
         setAllocatingId(busId);
         setMessage({ text: '', type: '' });
         try {
-            const response = await apiFetch(`${API}/buses/${busId}/auto-allocate`, { method: 'POST' });
+            const response = await apiFetch(
+                `${API}/buses/${busId}/auto-allocate?academicYear=${encodeURIComponent(academicYear)}`,
+                { method: 'POST' }
+            );
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
                 setMessage({ text: data.message || 'Allocation done.', type: 'success' });
@@ -103,12 +131,34 @@ const Fleet = () => {
         }
     };
 
+    const totalCapacity = list.reduce((sum, item) => sum + Number(item.capacity || 0), 0);
+    const totalSeatsFilled = list.reduce((sum, item) => sum + Number(item.seatsFilled || 0), 0);
+    const totalSeatsAvailable = list.reduce((sum, item) => sum + Number(item.seatsAvailable || 0), 0);
+    const fleetOccupancy = totalCapacity > 0
+        ? Math.min(100, Math.round((totalSeatsFilled / totalCapacity) * 100))
+        : 0;
+
     return (
         <Layout>
             <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-3xl font-extrabold text-slate-800 break-words tracking-tight">Fleet & Passengers</h2>
                     <p className="text-slate-700 mt-2 font-medium">Manage transport requests and bus capacity.</p>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <label htmlFor="fleet-academic-year" className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            Academic Year
+                        </label>
+                        <select
+                            id="fleet-academic-year"
+                            value={academicYear}
+                            onChange={(e) => setAcademicYear(e.target.value)}
+                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            {academicYearOptions.map((year) => (
+                                <option key={year} value={year}>{year}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
                 <button
                     type="button"
@@ -122,6 +172,27 @@ const Fleet = () => {
             </div>
             
             <PassengerReport ref={componentRef} passengers={printPassengers} />
+
+            {!loading && list.length > 0 && (
+                <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Academic Year</p>
+                        <p className="text-lg font-black text-slate-800 mt-1">{academicYear}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Capacity</p>
+                        <p className="text-lg font-black text-slate-800 mt-1">{totalCapacity}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-emerald-200 p-4 shadow-sm bg-emerald-50/40">
+                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Seats Filled</p>
+                        <p className="text-lg font-black text-emerald-700 mt-1">{totalSeatsFilled}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-blue-200 p-4 shadow-sm bg-blue-50/40">
+                        <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Remaining · {fleetOccupancy}%</p>
+                        <p className="text-lg font-black text-blue-700 mt-1">{totalSeatsAvailable}</p>
+                    </div>
+                </div>
+            )}
 
             {message.text && (
                 <div className={`mb-4 p-3 rounded-lg border flex items-center text-sm ${message.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>

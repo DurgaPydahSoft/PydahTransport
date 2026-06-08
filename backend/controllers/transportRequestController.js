@@ -212,7 +212,12 @@ const getTransportRequests = async (req, res) => {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
         const { route_id, status, bus_id, course, search } = req.query;
+        const explicitAcademicYear = req.query.academicYear || req.query.academic_year;
         const parts = getActivePassengerSqlParts(resolveAcademicYear(req.query));
+        const fallbackAcademicYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+        const filterAcademicYear = explicitAcademicYear
+            ? resolveAcademicYear(req.query)
+            : null;
         let sql = `
             SELECT tr.*,
                    COALESCE(s1.course, s2.course) as course,
@@ -258,6 +263,10 @@ const getTransportRequests = async (req, res) => {
             const searchPattern = `%${search}%`;
             params.push(searchPattern, searchPattern);
         }
+        if (filterAcademicYear) {
+            sql += ' AND COALESCE(tr.academic_year, ?) = ?';
+            params.push(fallbackAcademicYear, filterAcademicYear);
+        }
 
         sql += ' ORDER BY tr.request_date DESC';
         const [mysqlRows] = await mysqlPool.query(sql, params);
@@ -285,7 +294,12 @@ const getTransportRequests = async (req, res) => {
         // unless course exactly matches "Employee"
         if (!course || course === 'Employee') {
             const rawMongoRows = await EmployeeTransportRequest.find(mongoQuery).lean();
-            mongoRows = rawMongoRows.map(r => ({
+            const filteredMongoRows = filterAcademicYear
+                ? rawMongoRows.filter(
+                    (r) => (r.academic_year || fallbackAcademicYear) === filterAcademicYear
+                )
+                : rawMongoRows;
+            mongoRows = filteredMongoRows.map(r => ({
                 id: r._id.toString(),
                 admission_number: r.emp_no,
                 student_name: r.employee_name,
