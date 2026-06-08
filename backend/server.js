@@ -29,7 +29,7 @@ app.use('/api/students', protect, require('./routes/studentRoutes'));
 app.use('/api/inventory', protect, require('./routes/inventoryRoutes'));
 
 app.get('/', (req, res) => {
-    res.json({ message: 'Pydah Transport API is running' });
+    res.json({ message: 'Pydah Transport API is running🎉' });
 });
 
 const PORT = process.env.PORT || 5000;
