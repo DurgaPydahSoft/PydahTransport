@@ -1,4 +1,4 @@
-# **Pydah Transport Application – Educational Institute Edition  
+# Pydah Transport Application – Educational Institute Edition  
 Functional Requirements Documentation**
 
 ## **1. Overview**
