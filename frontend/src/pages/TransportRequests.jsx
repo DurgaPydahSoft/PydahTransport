@@ -18,7 +18,7 @@ const getDefaultAcademicYear = () => {
     return now.getMonth() >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
 };
 
-const courseExpiryKey = (courseId, yearOfStudy) => `${courseId}-${yearOfStudy}`;
+const courseExpiryKey = (courseId, yearOfStudy) => `${Number(courseId)}-${Number(yearOfStudy)}`;
 
 const getAcademicYearOptions = () => {
     const defaultYear = getDefaultAcademicYear();
@@ -54,6 +54,7 @@ const TransportRequests = () => {
     const [courseExpiryLoading, setCourseExpiryLoading] = useState(false);
     const [courseExpirySaving, setCourseExpirySaving] = useState(null);
     const [courseExpiryEdits, setCourseExpiryEdits] = useState({});
+    const [courseExpirySchemaOk, setCourseExpirySchemaOk] = useState(true);
     const [editingYears, setEditingYears] = useState({});
     const academicYearOptions = getAcademicYearOptions();
 
@@ -140,6 +141,7 @@ const TransportRequests = () => {
             const data = await response.json();
             if (response.ok) {
                 setCourseExpiryList(data.courses || []);
+                setCourseExpirySchemaOk(data.yearWiseKeyOk !== false);
                 const edits = {};
                 (data.courses || []).forEach((c) => {
                     if (c.expiry_date) {
@@ -147,6 +149,9 @@ const TransportRequests = () => {
                     }
                 });
                 setCourseExpiryEdits(edits);
+                if (data.yearWiseKeyOk === false && data.migrationHint) {
+                    setMessage({ text: data.migrationHint, type: 'error' });
+                }
             } else {
                 setMessage({ text: data.message || 'Failed to load course expiry settings.', type: 'error' });
             }
@@ -170,9 +175,9 @@ const TransportRequests = () => {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    course_id: courseId,
+                    course_id: Number(courseId),
                     academic_year: academicYear,
-                    year_of_study: yearOfStudy,
+                    year_of_study: Number(yearOfStudy),
                     expiry_date: expiryDate,
                 }),
             });
@@ -793,6 +798,16 @@ const TransportRequests = () => {
                         </select>
                     </div>
                 </div>
+
+                {!courseExpirySchemaOk && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 mb-4">
+                        The database still has the old <strong>course + academic year</strong> unique key, so saving
+                        Year 2 overwrites Year 1. Run this on MySQL, then re-enter dates per year:
+                        <pre className="mt-2 text-xs bg-red-100 p-2 rounded overflow-x-auto">
+                            ALTER TABLE course_transport_expiry DROP INDEX uk_course_academic_year;
+                        </pre>
+                    </div>
+                )}
 
                 {!selectedExpiryCourseId ? (
                     <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">

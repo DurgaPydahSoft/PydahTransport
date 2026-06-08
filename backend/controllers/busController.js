@@ -2,7 +2,7 @@ const Bus = require('../models/Bus');
 const Route = require('../models/Route');
 const { mysqlPool } = require('../config/db');
 const EmployeeTransportRequest = require('../models/EmployeeTransportRequest');
-const { resolveAcademicYear, getActivePassengerSqlParts } = require('./transportRequestController');
+const { resolveAcademicYear, getDefaultAcademicYear, getActivePassengerSqlParts } = require('./transportRequestController');
 
 // @desc    Get bus details with assigned route, passenger list, seats filled
 // @route   GET /api/buses/:id/details
@@ -19,6 +19,7 @@ const getBusDetails = async (req, res) => {
         }
         let mysqlPassengers = [];
         const academicYear = resolveAcademicYear(req.query);
+        const fallbackAcademicYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
         if (mysqlPool) {
             const parts = getActivePassengerSqlParts(academicYear);
             const [rows] = await mysqlPool.query(
@@ -34,8 +35,9 @@ const getBusDetails = async (req, res) => {
                  ${parts.studentJoins}
                  ${parts.expiryJoins}
                  WHERE tr.bus_id = ? AND tr.status = 'approved'
+                   AND COALESCE(tr.academic_year, ?) = ?
                  ORDER BY tr.stage_name, tr.student_name`,
-                [...parts.expiryParams, bus.busNumber]
+                [...parts.expiryParams, bus.busNumber, fallbackAcademicYear, academicYear]
             );
             mysqlPassengers = rows.map(r => ({
                 ...r,
@@ -47,7 +49,9 @@ const getBusDetails = async (req, res) => {
         }
 
         const mongoRequests = await EmployeeTransportRequest.find({ bus_id: bus.busNumber, status: 'approved' }).lean();
-        const mongoPassengers = mongoRequests.map(r => ({
+        const mongoPassengers = mongoRequests.filter(
+            (r) => (r.academic_year || fallbackAcademicYear) === academicYear
+        ).map(r => ({
             id: r._id.toString(),
             admission_number: r.emp_no,
             student_name: r.employee_name,

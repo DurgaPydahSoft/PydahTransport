@@ -32,7 +32,14 @@ CREATE TABLE IF NOT EXISTS course_transport_expiry (
   FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );
 
--- If you already created the old table (course-only, no year_of_study), run:
+-- FIX: If Year 2 expiry overwrites Year 1, the OLD unique key may still exist alongside the new one.
+-- Check: SHOW INDEX FROM course_transport_expiry;
+-- You must have uk_course_year_academic (course_id, academic_year, year_of_study)
+-- and must NOT still have uk_course_academic_year (course_id, academic_year only).
+--
+-- If year_of_study column is missing:
 -- ALTER TABLE course_transport_expiry ADD COLUMN year_of_study TINYINT NOT NULL DEFAULT 1 AFTER academic_year;
--- ALTER TABLE course_transport_expiry DROP INDEX uk_course_academic_year;
 -- ALTER TABLE course_transport_expiry ADD UNIQUE KEY uk_course_year_academic (course_id, academic_year, year_of_study);
+--
+-- Drop the legacy key (required if Year 2 saves overwrite Year 1):
+-- ALTER TABLE course_transport_expiry DROP INDEX uk_course_academic_year;

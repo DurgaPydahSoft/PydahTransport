@@ -10,6 +10,23 @@ import Loader from '../components/Loader';
 
 const API = import.meta.env.VITE_API_URL || '';
 
+const getDefaultAcademicYear = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    return now.getMonth() >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+};
+
+const getAcademicYearOptions = () => {
+    const defaultYear = getDefaultAcademicYear();
+    const startYear = Number(defaultYear.split('-')[0]);
+    const options = [];
+    for (let offset = -3; offset <= 3; offset += 1) {
+        const start = startYear + offset;
+        options.push(`${start}-${start + 1}`);
+    }
+    return options;
+};
+
 const BusDetails = () => {
     const { id } = useParams();
     const [data, setData] = useState(null);
@@ -22,6 +39,8 @@ const BusDetails = () => {
     const [inventoryHistory, setInventoryHistory] = useState([]);
     const [activeTab, setActiveTab] = useState('passengers');
     const [inventoryLoading, setInventoryLoading] = useState(false);
+    const [academicYear, setAcademicYear] = useState(getDefaultAcademicYear);
+    const academicYearOptions = getAcademicYearOptions();
 
     const componentRef = useRef();
     const handlePrint = useReactToPrint({
@@ -83,7 +102,9 @@ const BusDetails = () => {
             if (!id) return;
             setLoading(true);
             try {
-                const response = await fetch(`${API}/buses/${id}/details`);
+                const response = await fetch(
+                    `${API}/buses/${id}/details?academicYear=${encodeURIComponent(academicYear)}`
+                );
                 if (response.ok) {
                     const json = await response.json();
                     setData(json);
@@ -98,7 +119,7 @@ const BusDetails = () => {
             }
         };
         fetchDetails();
-    }, [id]);
+    }, [id, academicYear]);
 
     const openAssignModal = async () => {
         setAssignModalOpen(true);
@@ -130,7 +151,9 @@ const BusDetails = () => {
                 });
             }
             setAssignModalOpen(false);
-            const res = await fetch(`${API}/buses/${id}/details`);
+            const res = await fetch(
+                `${API}/buses/${id}/details?academicYear=${encodeURIComponent(academicYear)}`
+            );
             if (res.ok) setData(await res.json());
         } catch (e) {
             console.error(e);
@@ -169,7 +192,7 @@ const BusDetails = () => {
         );
     }
 
-    const { bus, route, passengers, academicYear, seatsFilled, seatsAvailable, capacity, occupancyPercent } = data;
+    const { bus, route, passengers, seatsFilled, seatsAvailable, capacity, occupancyPercent } = data;
 
     const activePassengers = (passengers || []).filter((p) => !p.is_expired);
     const studentCount = activePassengers.filter(p => !p.user_type || p.user_type === 'student').length;
@@ -221,6 +244,18 @@ const BusDetails = () => {
                     </div>
 
                     <div className="flex items-center gap-6">
+                        <div>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Academic Year</p>
+                            <select
+                                value={academicYear}
+                                onChange={(e) => setAcademicYear(e.target.value)}
+                                className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-bold text-gray-800 bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                {academicYearOptions.map((year) => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
+                        </div>
                         <div className="text-right">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Occupancy</p>
                             <div className="flex items-center gap-3">
@@ -274,7 +309,7 @@ const BusDetails = () => {
                             <span className="text-3xl font-black text-emerald-700">{seatsFilled}</span>
                             <span className="text-gray-400 font-bold">/ {capacity}</span>
                         </div>
-                        <p className="text-[10px] text-emerald-600 font-bold mt-1 uppercase">{seatsAvailable} seats available</p>
+                        <p className="text-[10px] text-emerald-600 font-bold mt-1 uppercase">{seatsAvailable} seats available · {academicYear}</p>
                     </div>
 
                     {/* Breakdown */}
@@ -341,7 +376,9 @@ const BusDetails = () => {
                 {activeTab === 'passengers' ? (
                     <>
                         <div className="p-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
-                            <h2 className="text-lg font-bold text-gray-800">Passenger list</h2>
+                            <h2 className="text-lg font-bold text-gray-800">
+                                Passenger list <span className="text-sm font-medium text-gray-500">({academicYear})</span>
+                            </h2>
                             {route && (
                                 <button
                                     type="button"
@@ -354,7 +391,7 @@ const BusDetails = () => {
                         </div>
                         {passengers.length === 0 ? (
                             <div className="p-12 text-center text-gray-500">
-                                <p>No passengers assigned to this bus yet.</p>
+                                <p>No passengers for academic year {academicYear} on this bus.</p>
                                 {route && (
                                     <button
                                         type="button"

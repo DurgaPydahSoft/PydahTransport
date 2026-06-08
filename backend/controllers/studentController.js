@@ -1,6 +1,46 @@
 const { mysqlPool } = require('../config/db');
 const { getDefaultAcademicYear, resolveAcademicYear } = require('./transportRequestController');
 
+const COURSE_EXPIRY_MIGRATION_MSG =
+    'Remove the old course+academic-year-only unique key so each year can have its own date. Run: ' +
+    'ALTER TABLE course_transport_expiry DROP INDEX uk_course_academic_year; ' +
+    '(If year_of_study column is missing, add it first — see backend/mysql-schema/alter-transport-requests-semester.sql)';
+
+let courseExpirySchemaOkCache = null;
+
+const courseExpirySupportsYearOfStudy = async () => {
+    if (courseExpirySchemaOkCache != null) return courseExpirySchemaOkCache;
+    try {
+        const [rows] = await mysqlPool.query(
+            `SELECT INDEX_NAME, COLUMN_NAME
+             FROM information_schema.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = 'course_transport_expiry'
+               AND NON_UNIQUE = 0
+               AND INDEX_NAME != 'PRIMARY'`
+        );
+        const indexColumns = {};
+        for (const row of rows) {
+            if (!indexColumns[row.INDEX_NAME]) indexColumns[row.INDEX_NAME] = new Set();
+            indexColumns[row.INDEX_NAME].add(row.COLUMN_NAME);
+        }
+        const hasYearWiseKey = Object.values(indexColumns).some(
+            (cols) => cols.has('course_id') && cols.has('academic_year') && cols.has('year_of_study')
+        );
+        const hasLegacyCourseYearKey = Object.values(indexColumns).some(
+            (cols) =>
+                cols.size === 2 &&
+                cols.has('course_id') &&
+                cols.has('academic_year') &&
+                !cols.has('year_of_study')
+        );
+        courseExpirySchemaOkCache = hasYearWiseKey && !hasLegacyCourseYearKey;
+    } catch {
+        courseExpirySchemaOkCache = false;
+    }
+    return courseExpirySchemaOkCache;
+};
+
 // @desc    Search students from MySQL
 // @route   GET /api/students/search
 // @access  Private/Admin
@@ -53,6 +93,7 @@ const getCourses = async (req, res) => {
 // @route   GET /api/students/course-expiry?academicYear=2024-2025
 const getCourseExpiry = async (req, res) => {
     const academicYear = resolveAcademicYear(req.query);
+    const fallbackAcademicYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
     try {
         if (!mysqlPool) {
             return res.status(500).json({ message: 'MySQL connection not established' });
@@ -102,14 +143,24 @@ const getCourseExpiry = async (req, res) => {
                 AND cte2.academic_year = ?
                 AND cte2.year_of_study = COALESCE(s1.current_year, s2.current_year, tr.year_of_study, 1)
                WHERE tr.status = 'approved'
+                 AND COALESCE(tr.academic_year, ?) = ?
                GROUP BY c2.id, COALESCE(s1.current_year, s2.current_year, tr.year_of_study, 1)
              ) pc ON pc.course_id = c.id AND pc.year_of_study = yrs.year_of_study
              WHERE c.is_active = 1
              ORDER BY c.name ASC, yrs.year_of_study ASC`,
-            [academicYear, academicYear]
+            [academicYear, academicYear, fallbackAcademicYear, academicYear]
         );
 
-        res.json({ academicYear, courses: rows });
+        const yearWiseKeyOk = await courseExpirySupportsYearOfStudy();
+        res.json({
+            academicYear,
+            courses: rows.map((row) => ({
+                ...row,
+                year_of_study: Number(row.year_of_study),
+            })),
+            yearWiseKeyOk,
+            ...(yearWiseKeyOk ? {} : { migrationHint: COURSE_EXPIRY_MIGRATION_MSG }),
+        });
     } catch (error) {
         if (error.code === 'ER_NO_SUCH_TABLE') {
             return res.status(503).json({
@@ -150,12 +201,32 @@ const setCourseExpiry = async (req, res) => {
             });
         }
 
-        await mysqlPool.query(
-            `INSERT INTO course_transport_expiry (course_id, academic_year, year_of_study, expiry_date)
-             VALUES (?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE expiry_date = VALUES(expiry_date), updated_at = CURRENT_TIMESTAMP`,
-            [course_id, academicYear, yearOfStudy, expiry_date]
+        const yearWiseKeyOk = await courseExpirySupportsYearOfStudy();
+        if (!yearWiseKeyOk) {
+            return res.status(503).json({ message: COURSE_EXPIRY_MIGRATION_MSG });
+        }
+
+        const [updateResult] = await mysqlPool.query(
+            `UPDATE course_transport_expiry
+             SET expiry_date = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE course_id = ? AND academic_year = ? AND year_of_study = ?`,
+            [expiry_date, course_id, academicYear, yearOfStudy]
         );
+
+        if (updateResult.affectedRows === 0) {
+            try {
+                await mysqlPool.query(
+                    `INSERT INTO course_transport_expiry (course_id, academic_year, year_of_study, expiry_date)
+                     VALUES (?, ?, ?, ?)`,
+                    [course_id, academicYear, yearOfStudy, expiry_date]
+                );
+            } catch (insertError) {
+                if (insertError.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ message: COURSE_EXPIRY_MIGRATION_MSG });
+                }
+                throw insertError;
+            }
+        }
 
         const [saved] = await mysqlPool.query(
             `SELECT id, course_id, academic_year, year_of_study, expiry_date FROM course_transport_expiry
@@ -163,9 +234,16 @@ const setCourseExpiry = async (req, res) => {
             [course_id, academicYear, yearOfStudy]
         );
 
+        if (!saved[0]) {
+            return res.status(500).json({
+                message: `Saved expiry for Year ${yearOfStudy} but could not read it back. Check database constraints.`,
+            });
+        }
+
         res.json({
             message: `Transport expiry set for ${courseRows[0].name} Year ${yearOfStudy} (${academicYear}). Passes expire on ${expiry_date}, regardless of semester dates.`,
             ...saved[0],
+            year_of_study: Number(saved[0].year_of_study),
             course_name: courseRows[0].name,
         });
     } catch (error) {
