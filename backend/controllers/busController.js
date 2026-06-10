@@ -1,8 +1,128 @@
 const Bus = require('../models/Bus');
 const Route = require('../models/Route');
+const BusRouteHistory = require('../models/BusRouteHistory');
+const BusStaffHistory = require('../models/BusStaffHistory');
 const { mysqlPool } = require('../config/db');
 const EmployeeTransportRequest = require('../models/EmployeeTransportRequest');
 const { resolveAcademicYear, getDefaultAcademicYear, getActivePassengerSqlParts } = require('./transportRequestController');
+
+const LEGACY_CHANGED_BY = 'Existing assignment';
+
+const getChangedByName = (req) =>
+    req.user?.employee_name || req.user?.name || req.user?.username || 'Admin';
+
+const getLegacyAssignedDate = (bus) => bus.createdAt || bus.updatedAt || new Date();
+
+/** Import route/driver/cleaner that were set before history tracking existed. */
+const backfillLegacyBusHistory = async (bus) => {
+    if (!bus?.busNumber) return;
+
+    const legacyDate = getLegacyAssignedDate(bus);
+
+    if (bus.assignedRouteId) {
+        const routeHistoryCount = await BusRouteHistory.countDocuments({ busNumber: bus.busNumber });
+        if (routeHistoryCount === 0) {
+            const routeName = await resolveRouteName(bus.assignedRouteId);
+            await BusRouteHistory.create({
+                busId: bus._id,
+                busNumber: bus.busNumber,
+                routeId: bus.assignedRouteId,
+                routeName,
+                previousRouteId: null,
+                previousRouteName: null,
+                assignedAt: legacyDate,
+                action: 'assigned',
+                changedBy: LEGACY_CHANGED_BY,
+            });
+        }
+    }
+
+    const staffRoles = [
+        { role: 'driver', name: bus.driverName },
+        { role: 'cleaner', name: bus.attendantName },
+    ];
+
+    for (const { role, name } of staffRoles) {
+        const staffName = (name || '').trim();
+        if (!staffName) continue;
+
+        const roleCount = await BusStaffHistory.countDocuments({ busNumber: bus.busNumber, role });
+        if (roleCount === 0) {
+            await BusStaffHistory.create({
+                busId: bus._id,
+                busNumber: bus.busNumber,
+                role,
+                staffName,
+                entryDate: legacyDate,
+                isCurrent: true,
+                changedBy: LEGACY_CHANGED_BY,
+            });
+        }
+    }
+};
+
+const resolveRouteName = async (routeId) => {
+    if (!routeId) return null;
+    const route = await Route.findOne({ routeId }).lean();
+    return route?.routeName || routeId;
+};
+
+const recordRouteHistory = async (bus, previousRouteId, newRouteId, changedBy) => {
+    if (previousRouteId === newRouteId) return;
+
+    const [previousRouteName, routeName] = await Promise.all([
+        resolveRouteName(previousRouteId),
+        resolveRouteName(newRouteId),
+    ]);
+
+    let action = 'assigned';
+    if (previousRouteId && newRouteId) action = 'changed';
+    else if (previousRouteId && !newRouteId) action = 'removed';
+
+    await BusRouteHistory.create({
+        busId: bus._id,
+        busNumber: bus.busNumber,
+        routeId: newRouteId || null,
+        routeName: routeName || null,
+        previousRouteId: previousRouteId || null,
+        previousRouteName: previousRouteName || null,
+        assignedAt: new Date(),
+        action,
+        changedBy,
+    });
+};
+
+const recordStaffHistory = async (bus, role, change, changedBy) => {
+    if (!change?.newName) return;
+
+    const exitDate = change.exitDate ? new Date(change.exitDate) : null;
+    const entryDate = change.entryDate ? new Date(change.entryDate) : new Date();
+
+    if (change.previousName && exitDate) {
+        await BusStaffHistory.updateMany(
+            {
+                busNumber: bus.busNumber,
+                role,
+                isCurrent: true,
+            },
+            {
+                exitDate,
+                isCurrent: false,
+            }
+        );
+    }
+
+    await BusStaffHistory.create({
+        busId: bus._id,
+        busNumber: bus.busNumber,
+        role,
+        staffName: change.newName,
+        empNo: change.empNo || null,
+        entryDate,
+        isCurrent: true,
+        changedBy,
+    });
+};
 
 // @desc    Get bus details with assigned route, passenger list, seats filled
 // @route   GET /api/buses/:id/details
@@ -282,23 +402,97 @@ const updateBus = async (req, res) => {
     try {
         const bus = await Bus.findById(req.params.id);
 
-        if (bus) {
-            bus.busNumber = req.body.busNumber || bus.busNumber;
-            bus.capacity = req.body.capacity || bus.capacity;
-            bus.type = req.body.type || bus.type;
-            bus.amenities = req.body.amenities || bus.amenities;
-            bus.driverName = req.body.driverName || bus.driverName;
-            bus.attendantName = req.body.attendantName || bus.attendantName;
-            bus.status = req.body.status || bus.status;
-            if (req.body.assignedRouteId !== undefined) bus.assignedRouteId = req.body.assignedRouteId || null;
-
-            const updatedBus = await bus.save();
-            res.json(updatedBus);
-        } else {
-            res.status(404).json({ message: 'Bus not found' });
+        if (!bus) {
+            return res.status(404).json({ message: 'Bus not found' });
         }
+
+        const previousRouteId = bus.assignedRouteId || null;
+        const changedBy = getChangedByName(req);
+        const { staffChanges } = req.body;
+
+        bus.busNumber = req.body.busNumber || bus.busNumber;
+        bus.capacity = req.body.capacity || bus.capacity;
+        bus.type = req.body.type || bus.type;
+        bus.amenities = req.body.amenities || bus.amenities;
+        bus.status = req.body.status || bus.status;
+
+        if (staffChanges?.driver) {
+            bus.driverName = staffChanges.driver.newName || bus.driverName;
+        } else if (req.body.driverName !== undefined) {
+            bus.driverName = req.body.driverName;
+        }
+
+        if (staffChanges?.cleaner) {
+            bus.attendantName = staffChanges.cleaner.newName || bus.attendantName;
+        } else if (req.body.attendantName !== undefined) {
+            bus.attendantName = req.body.attendantName;
+        }
+
+        if (req.body.assignedRouteId !== undefined) {
+            const newRouteId = req.body.assignedRouteId || null;
+            if (newRouteId !== previousRouteId) {
+                bus.assignedRouteId = newRouteId;
+                await recordRouteHistory(bus, previousRouteId, newRouteId, changedBy);
+            }
+        }
+
+        if (staffChanges?.driver) {
+            await recordStaffHistory(bus, 'driver', staffChanges.driver, changedBy);
+        }
+        if (staffChanges?.cleaner) {
+            await recordStaffHistory(bus, 'cleaner', staffChanges.cleaner, changedBy);
+        }
+
+        const updatedBus = await bus.save();
+        res.json(updatedBus);
     } catch (error) {
         res.status(400).json({ message: error.message });
+    }
+};
+
+// @desc    Get route assignment history for a bus
+// @route   GET /api/buses/:id/history/route
+// @access  Private/Admin
+const getBusRouteHistory = async (req, res) => {
+    try {
+        const bus = await Bus.findById(req.params.id);
+        if (!bus) {
+            return res.status(404).json({ message: 'Bus not found' });
+        }
+
+        await backfillLegacyBusHistory(bus);
+
+        const history = await BusRouteHistory.find({ busNumber: bus.busNumber })
+            .sort({ assignedAt: -1 })
+            .lean();
+
+        res.json(history);
+    } catch (error) {
+        console.error('Error fetching bus route history:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get driver/cleaner assignment history for a bus
+// @route   GET /api/buses/:id/history/staff
+// @access  Private/Admin
+const getBusStaffHistory = async (req, res) => {
+    try {
+        const bus = await Bus.findById(req.params.id);
+        if (!bus) {
+            return res.status(404).json({ message: 'Bus not found' });
+        }
+
+        await backfillLegacyBusHistory(bus);
+
+        const history = await BusStaffHistory.find({ busNumber: bus.busNumber })
+            .sort({ entryDate: -1 })
+            .lean();
+
+        res.json(history);
+    } catch (error) {
+        console.error('Error fetching bus staff history:', error);
+        res.status(500).json({ message: error.message });
     }
 };
 
@@ -324,6 +518,8 @@ module.exports = {
     getBuses,
     getBusesOverview,
     getBusDetails,
+    getBusRouteHistory,
+    getBusStaffHistory,
     autoAllocate,
     createBus,
     updateBus,

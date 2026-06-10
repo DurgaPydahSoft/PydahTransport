@@ -23,6 +23,19 @@ const API = import.meta.env.VITE_API_URL || '';
 const TABS = { buses: 'buses', mapping: 'mapping', staff: 'staff' };
 const VIEW_MODES = { table: 'table', card: 'card' };
 
+const todayDateInput = () => new Date().toISOString().slice(0, 10);
+
+const normalizeStaffName = (name) => (name || '').trim().toLowerCase();
+
+const matchStaffByName = (list, name) =>
+    list.find((s) => normalizeStaffName(s.employee_name) === normalizeStaffName(name));
+
+const withCurrentStaffOption = (list, currentName) => {
+    if (!currentName) return list;
+    if (list.some((s) => s.employee_name === currentName)) return list;
+    return [{ _id: 'current-assigned', employee_name: currentName, emp_no: 'Assigned' }, ...list];
+};
+
 const BusManagement = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState(TABS.buses);
@@ -45,6 +58,11 @@ const BusManagement = () => {
         driverName: '',
         attendantName: '',
         status: 'Active'
+    });
+    const [originalBus, setOriginalBus] = useState(null);
+    const [staffChangeDates, setStaffChangeDates] = useState({
+        driver: { exitDate: '', entryDate: '' },
+        cleaner: { exitDate: '', entryDate: '' },
     });
 
     const fetchBuses = async () => {
@@ -69,7 +87,7 @@ const BusManagement = () => {
         }
     };
 
-    const fetchDrivers = async () => {
+    const loadDrivers = async () => {
         setDriversLoading(true);
         try {
             const adminInfo = JSON.parse(localStorage.getItem('adminInfo'));
@@ -78,7 +96,7 @@ const BusManagement = () => {
             if (!token) {
                 console.error('No token found in localStorage');
                 setDrivers([]);
-                return;
+                return [];
             }
 
             const response = await apiFetch(`${API}/employees/drivers`, {
@@ -87,16 +105,19 @@ const BusManagement = () => {
                 }
             });
             const data = await response.json();
-            setDrivers(Array.isArray(data) ? data : []);
+            const list = Array.isArray(data) ? data : [];
+            setDrivers(list);
+            return list;
         } catch (error) {
             console.error('Error fetching drivers:', error);
             setDrivers([]);
+            return [];
         } finally {
             setDriversLoading(false);
         }
     };
 
-    const fetchCleaners = async () => {
+    const loadCleaners = async () => {
         setCleanersLoading(true);
         try {
             const adminInfo = JSON.parse(localStorage.getItem('adminInfo'));
@@ -104,7 +125,7 @@ const BusManagement = () => {
 
             if (!token) {
                 setCleaners([]);
-                return;
+                return [];
             }
 
             const response = await apiFetch(`${API}/employees/cleaners`, {
@@ -113,10 +134,13 @@ const BusManagement = () => {
                 }
             });
             const data = await response.json();
-            setCleaners(Array.isArray(data) ? data : []);
+            const list = Array.isArray(data) ? data : [];
+            setCleaners(list);
+            return list;
         } catch (error) {
             console.error('Error fetching cleaners:', error);
             setCleaners([]);
+            return [];
         } finally {
             setCleanersLoading(false);
         }
@@ -125,9 +149,22 @@ const BusManagement = () => {
     useEffect(() => {
         fetchBuses();
         fetchRoutes();
-        fetchDrivers();
-        fetchCleaners();
+        loadDrivers();
+        loadCleaners();
     }, []);
+
+    const driverChanged = Boolean(
+        editingId &&
+        originalBus &&
+        normalizeStaffName(formData.driverName) !== normalizeStaffName(originalBus.driverName)
+    );
+    const cleanerChanged = Boolean(
+        editingId &&
+        originalBus &&
+        normalizeStaffName(formData.attendantName) !== normalizeStaffName(originalBus.attendantName)
+    );
+    const driverOptions = withCurrentStaffOption(drivers, formData.driverName);
+    const cleanerOptions = withCurrentStaffOption(cleaners, formData.attendantName);
 
     const handleAssignRoute = async (busId, routeId) => {
         setAssigningBusId(busId);
@@ -153,14 +190,23 @@ const BusManagement = () => {
         }));
     };
 
-    const handleEdit = (bus, e) => {
+    const handleEdit = async (bus, e) => {
         e.stopPropagation();
+        const [driverList, cleanerList] = await Promise.all([loadDrivers(), loadCleaners()]);
+        const matchedDriver = matchStaffByName(driverList, bus.driverName);
+        const matchedCleaner = matchStaffByName(cleanerList, bus.attendantName);
+
+        setOriginalBus(bus);
+        setStaffChangeDates({
+            driver: { exitDate: todayDateInput(), entryDate: todayDateInput() },
+            cleaner: { exitDate: todayDateInput(), entryDate: todayDateInput() },
+        });
         setFormData({
             busNumber: bus.busNumber,
             capacity: bus.capacity,
             type: bus.type,
-            driverName: bus.driverName || '',
-            attendantName: bus.attendantName || '',
+            driverName: matchedDriver?.employee_name || bus.driverName || '',
+            attendantName: matchedCleaner?.employee_name || bus.attendantName || '',
             status: bus.status
         });
         setEditingId(bus._id);
@@ -190,6 +236,11 @@ const BusManagement = () => {
     const handleCloseModal = () => {
         setIsModalOpen(false);
         setEditingId(null);
+        setOriginalBus(null);
+        setStaffChangeDates({
+            driver: { exitDate: '', entryDate: '' },
+            cleaner: { exitDate: '', entryDate: '' },
+        });
         setFormData({
             busNumber: '',
             capacity: '',
@@ -200,8 +251,37 @@ const BusManagement = () => {
         });
     };
 
+    const handleStaffDateChange = (role, field, value) => {
+        setStaffChangeDates((prev) => ({
+            ...prev,
+            [role]: { ...prev[role], [field]: value },
+        }));
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        if (driverChanged) {
+            if (originalBus?.driverName && !staffChangeDates.driver.exitDate) {
+                alert('Please set the exit date for the previous driver.');
+                return;
+            }
+            if (formData.driverName && !staffChangeDates.driver.entryDate) {
+                alert('Please set the entry date for the new driver.');
+                return;
+            }
+        }
+        if (cleanerChanged) {
+            if (originalBus?.attendantName && !staffChangeDates.cleaner.exitDate) {
+                alert('Please set the exit date for the previous cleaner.');
+                return;
+            }
+            if (formData.attendantName && !staffChangeDates.cleaner.entryDate) {
+                alert('Please set the entry date for the new cleaner.');
+                return;
+            }
+        }
+
         try {
             const url = editingId
                 ? `${API}/buses/${editingId}`
@@ -209,12 +289,35 @@ const BusManagement = () => {
 
             const method = editingId ? 'PUT' : 'POST';
 
+            const payload = { ...formData };
+            if (editingId && (driverChanged || cleanerChanged)) {
+                payload.staffChanges = {};
+                if (driverChanged) {
+                    payload.staffChanges.driver = {
+                        previousName: originalBus?.driverName || null,
+                        newName: formData.driverName || null,
+                        exitDate: originalBus?.driverName ? staffChangeDates.driver.exitDate : null,
+                        entryDate: staffChangeDates.driver.entryDate,
+                        empNo: matchStaffByName(drivers, formData.driverName)?.emp_no || null,
+                    };
+                }
+                if (cleanerChanged) {
+                    payload.staffChanges.cleaner = {
+                        previousName: originalBus?.attendantName || null,
+                        newName: formData.attendantName || null,
+                        exitDate: originalBus?.attendantName ? staffChangeDates.cleaner.exitDate : null,
+                        entryDate: staffChangeDates.cleaner.entryDate,
+                        empNo: matchStaffByName(cleaners, formData.attendantName)?.emp_no || null,
+                    };
+                }
+            }
+
             const response = await apiFetch(url, {
                 method: method,
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(payload)
             });
 
             if (response.ok) {
@@ -626,10 +729,49 @@ const BusManagement = () => {
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
                         >
                             <option value="">— Select Driver —</option>
-                            {drivers.map(d => (
+                            {driverOptions.map(d => (
                                 <option key={d._id} value={d.employee_name}>{d.employee_name} ({d.emp_no})</option>
                             ))}
                         </select>
+                        {driverChanged && (
+                            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                                <p className="text-xs font-black text-amber-800 uppercase tracking-wide">Driver change details</p>
+                                {originalBus?.driverName && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <p className="text-xs font-semibold text-slate-600 mb-1">Previous driver</p>
+                                            <p className="text-sm font-bold text-slate-900">{originalBus.driverName}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-600 mb-1">Exit date</label>
+                                            <input
+                                                type="date"
+                                                required
+                                                value={staffChangeDates.driver.exitDate}
+                                                onChange={(e) => handleStaffDateChange('driver', 'exitDate', e.target.value)}
+                                                className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <p className="text-xs font-semibold text-slate-600 mb-1">New driver</p>
+                                        <p className="text-sm font-bold text-slate-900">{formData.driverName || '—'}</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Entry date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={staffChangeDates.driver.entryDate}
+                                            onChange={(e) => handleStaffDateChange('driver', 'entryDate', e.target.value)}
+                                            className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1.5">Cleaner (Attendant)</label>
@@ -640,10 +782,49 @@ const BusManagement = () => {
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
                         >
                             <option value="">— Select Cleaner —</option>
-                            {cleaners.map(c => (
+                            {cleanerOptions.map(c => (
                                 <option key={c._id} value={c.employee_name}>{c.employee_name} ({c.emp_no})</option>
                             ))}
                         </select>
+                        {cleanerChanged && (
+                            <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50 p-4 space-y-3">
+                                <p className="text-xs font-black text-purple-800 uppercase tracking-wide">Cleaner change details</p>
+                                {originalBus?.attendantName && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <p className="text-xs font-semibold text-slate-600 mb-1">Previous cleaner</p>
+                                            <p className="text-sm font-bold text-slate-900">{originalBus.attendantName}</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-600 mb-1">Exit date</label>
+                                            <input
+                                                type="date"
+                                                required
+                                                value={staffChangeDates.cleaner.exitDate}
+                                                onChange={(e) => handleStaffDateChange('cleaner', 'exitDate', e.target.value)}
+                                                className="w-full px-3 py-2 rounded-lg border border-purple-200 bg-white text-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <p className="text-xs font-semibold text-slate-600 mb-1">New cleaner</p>
+                                        <p className="text-sm font-bold text-slate-900">{formData.attendantName || '—'}</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Entry date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={staffChangeDates.cleaner.entryDate}
+                                            onChange={(e) => handleStaffDateChange('cleaner', 'entryDate', e.target.value)}
+                                            className="w-full px-3 py-2 rounded-lg border border-purple-200 bg-white text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1.5">Status</label>

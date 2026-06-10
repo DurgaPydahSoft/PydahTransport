@@ -72,22 +72,20 @@ const AdmitCardCopy = ({ copyLabel, passenger }) => {
                     <div className="student-block">
                         <div className="col-details">
                             <div className="section-title">STUDENT DETAILS</div>
-                            <table className="details-table">
-                                <tbody>
-                                    <tr><td className="lbl">Name</td><td className="val">{name}</td></tr>
-                                    <tr><td className="lbl">{isEmployee ? 'Emp No' : 'Roll No'}</td><td className="val">{rollNo}</td></tr>
-                                    {!isEmployee && (
-                                        <tr><td className="lbl">PIN No</td><td className="val">{pin_no || '—'}</td></tr>
-                                    )}
-                                    <tr><td className="lbl">Course</td><td className="val">{displayCourse}{branch ? ` (${branch})` : ''}</td></tr>
-                                    <tr><td className="lbl">Year</td><td className="val">{isEmployee ? '—' : (year_of_study ?? '—')}</td></tr>
-                                    <tr><td className="lbl">Mobile</td><td className="val">{student_mobile || '—'}</td></tr>
-                                    <tr><td className="lbl">Parent No</td><td className="val">{parent_mobile1 || '—'}</td></tr>
-                                    <tr><td className="lbl">Father</td><td className="val">{father_name || '—'}</td></tr>
-                                    <tr><td className="lbl">Address</td><td className="val address-val">{student_address || '—'}</td></tr>
-                                    <tr><td className="lbl">Valid Until</td><td className="val">{isEmployee ? 'N/A' : formatDate(expiry)}</td></tr>
-                                </tbody>
-                            </table>
+                            <div className="details-list">
+                                <div className="detail-row"><span className="lbl">Name</span><span className="val">{name}</span></div>
+                                <div className="detail-row"><span className="lbl">{isEmployee ? 'Emp No' : 'Roll No'}</span><span className="val">{rollNo}</span></div>
+                                {!isEmployee && (
+                                    <div className="detail-row"><span className="lbl">PIN No</span><span className="val">{pin_no || '—'}</span></div>
+                                )}
+                                <div className="detail-row"><span className="lbl">Course</span><span className="val">{displayCourse}{branch ? ` (${branch})` : ''}</span></div>
+                                <div className="detail-row"><span className="lbl">Year</span><span className="val">{isEmployee ? '—' : (year_of_study ?? '—')}</span></div>
+                                <div className="detail-row"><span className="lbl">Mobile</span><span className="val">{student_mobile || '—'}</span></div>
+                                <div className="detail-row"><span className="lbl">Parent No</span><span className="val">{parent_mobile1 || '—'}</span></div>
+                                <div className="detail-row"><span className="lbl">Father</span><span className="val">{father_name || '—'}</span></div>
+                                <div className="detail-row"><span className="lbl">Address</span><span className="val address-val">{student_address || '—'}</span></div>
+                                <div className="detail-row"><span className="lbl">Valid Until</span><span className="val">{isEmployee ? 'N/A' : formatDate(expiry)}</span></div>
+                            </div>
                         </div>
 
                         <div className="col-photo">
@@ -308,21 +306,24 @@ const TransportAdmitCard = forwardRef(({ passenger, busMeta }, ref) => {
                         margin-bottom: 1mm;
                         text-transform: uppercase;
                     }
-                    .details-table {
+                    .details-list {
                         width: 100%;
-                        border-collapse: collapse;
                         font-size: 6.5pt;
                     }
-                    .details-table td {
-                        padding: 0.5mm 1mm;
-                        vertical-align: top;
+                    .detail-row {
+                        display: flex;
+                        gap: 2mm;
+                        padding: 0.4mm 0;
+                        align-items: flex-start;
                     }
-                    .details-table .lbl {
+                    .detail-row .lbl {
                         font-weight: 700;
                         width: 28%;
+                        flex-shrink: 0;
                     }
-                    .details-table .val {
+                    .detail-row .val {
                         font-weight: 500;
+                        flex: 1;
                     }
                     .address-val {
                         font-size: 5.5pt;

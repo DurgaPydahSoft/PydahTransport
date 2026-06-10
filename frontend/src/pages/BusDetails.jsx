@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
-import { Download, FileText, History, Users as UsersIcon, Package, Calendar, Tag } from 'lucide-react';
+import { Download, FileText, History, Users as UsersIcon, Package, Calendar, Tag, MapPin, UserCheck } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import PassengerReport from '../components/PassengerReport';
@@ -40,8 +40,13 @@ const BusDetails = () => {
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [fetchingPass, setFetchingPass] = useState(false);
     const [inventoryHistory, setInventoryHistory] = useState([]);
+    const [routeHistory, setRouteHistory] = useState([]);
+    const [staffHistory, setStaffHistory] = useState([]);
     const [activeTab, setActiveTab] = useState('passengers');
+    const [historySubTab, setHistorySubTab] = useState('inventory');
     const [inventoryLoading, setInventoryLoading] = useState(false);
+    const [routeHistoryLoading, setRouteHistoryLoading] = useState(false);
+    const [staffHistoryLoading, setStaffHistoryLoading] = useState(false);
     const [academicYear, setAcademicYear] = useState(getDefaultAcademicYear);
     const academicYearOptions = getAcademicYearOptions();
 
@@ -97,10 +102,52 @@ const BusDetails = () => {
             }
         };
 
-        if (activeTab === 'inventory') {
+        if (activeTab === 'history' && historySubTab === 'inventory') {
             fetchInventory();
         }
-    }, [data?.bus?.busNumber, activeTab]);
+    }, [data?.bus?.busNumber, activeTab, historySubTab]);
+
+    useEffect(() => {
+        const fetchRouteHistory = async () => {
+            if (!id) return;
+            setRouteHistoryLoading(true);
+            try {
+                const response = await apiFetch(`${API}/buses/${id}/history/route`);
+                if (response.ok) {
+                    setRouteHistory(await response.json());
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setRouteHistoryLoading(false);
+            }
+        };
+
+        if (activeTab === 'history' && historySubTab === 'route') {
+            fetchRouteHistory();
+        }
+    }, [id, activeTab, historySubTab]);
+
+    useEffect(() => {
+        const fetchStaffHistory = async () => {
+            if (!id) return;
+            setStaffHistoryLoading(true);
+            try {
+                const response = await apiFetch(`${API}/buses/${id}/history/staff`);
+                if (response.ok) {
+                    setStaffHistory(await response.json());
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setStaffHistoryLoading(false);
+            }
+        };
+
+        if (activeTab === 'history' && historySubTab === 'staff') {
+            fetchStaffHistory();
+        }
+    }, [id, activeTab, historySubTab]);
 
     useEffect(() => {
         const fetchDetails = async () => {
@@ -371,10 +418,10 @@ const BusDetails = () => {
                         <UsersIcon size={18} /> Passenger list
                     </button>
                     <button
-                        onClick={() => setActiveTab('inventory')}
-                        className={`px-6 py-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'inventory' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+                        onClick={() => setActiveTab('history')}
+                        className={`px-6 py-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
                     >
-                        <History size={18} /> Inventory History
+                        <History size={18} /> History
                     </button>
                 </div>
 
@@ -488,57 +535,184 @@ const BusDetails = () => {
                         )}
                     </>
                 ) : (
-                    <div className="p-6">
-                        {inventoryLoading ? (
-                            <div className="py-20 flex justify-center"><Loader text="Loading history..." /></div>
-                        ) : inventoryHistory.length > 0 ? (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="bg-gray-50 border-b border-gray-100 text-[11px] uppercase text-gray-400 font-black tracking-widest">
-                                            <th className="px-6 py-4">Date</th>
-                                            <th className="px-6 py-4">Item</th>
-                                            <th className="px-6 py-4">Quantity</th>
-                                            <th className="px-6 py-4">Remarks</th>
-                                            <th className="px-6 py-4">Allocated By</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {inventoryHistory.map(record => (
-                                            <tr key={record._id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-bold">
-                                                    <div className="flex items-center gap-2">
-                                                        <Calendar size={14} className="text-gray-400" />
-                                                        {new Date(record.allocatedDate).toLocaleDateString()}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-2">
-                                                        <Package size={14} className="text-blue-400" />
-                                                        <span className="font-bold text-gray-800 text-sm">{record.itemId?.itemName || 'Deleted Item'}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className="font-black text-blue-700">{record.quantity} {record.itemId?.unit || ''}</span>
-                                                </td>
-                                                <td className="px-6 py-4 text-xs text-gray-500 italic">
-                                                    {record.remarks || '—'}
-                                                </td>
-                                                <td className="px-6 py-4 text-sm text-gray-500 font-medium">
-                                                    {record.adminName}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <div className="py-20 text-center text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100">
-                                <History className="mx-auto mb-3 opacity-20" size={48} />
-                                <p className="font-medium text-sm">No items have been allocated to this bus yet.</p>
-                                <Link to="/inventory" className="mt-4 inline-block text-blue-600 font-bold hover:underline">Go to Inventory Management</Link>
-                            </div>
-                        )}
+                    <div>
+                        <div className="px-6 pt-4 border-b border-gray-100 flex flex-wrap gap-2">
+                            {[
+                                { id: 'inventory', label: 'Inventory History', icon: Package },
+                                { id: 'route', label: 'Route History', icon: MapPin },
+                                { id: 'staff', label: 'Driver & Cleaner History', icon: UserCheck },
+                            ].map(({ id, label, icon: Icon }) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    onClick={() => setHistorySubTab(id)}
+                                    className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${historySubTab === id ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}
+                                >
+                                    <Icon size={14} />
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="p-6">
+                            {historySubTab === 'inventory' && (
+                                inventoryLoading ? (
+                                    <div className="py-20 flex justify-center"><Loader text="Loading inventory history..." /></div>
+                                ) : inventoryHistory.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-gray-100 text-[11px] uppercase text-gray-400 font-black tracking-widest">
+                                                    <th className="px-6 py-4">Date</th>
+                                                    <th className="px-6 py-4">Item</th>
+                                                    <th className="px-6 py-4">Quantity</th>
+                                                    <th className="px-6 py-4">Remarks</th>
+                                                    <th className="px-6 py-4">Allocated By</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {inventoryHistory.map(record => (
+                                                    <tr key={record._id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-bold">
+                                                            <div className="flex items-center gap-2">
+                                                                <Calendar size={14} className="text-gray-400" />
+                                                                {new Date(record.allocatedDate).toLocaleDateString()}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-2">
+                                                                <Package size={14} className="text-blue-400" />
+                                                                <span className="font-bold text-gray-800 text-sm">{record.itemId?.itemName || 'Deleted Item'}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="font-black text-blue-700">{record.quantity} {record.itemId?.unit || ''}</span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-xs text-gray-500 italic">
+                                                            {record.remarks || '—'}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-500 font-medium">
+                                                            {record.adminName}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="py-20 text-center text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100">
+                                        <History className="mx-auto mb-3 opacity-20" size={48} />
+                                        <p className="font-medium text-sm">No items have been allocated to this bus yet.</p>
+                                        <Link to="/inventory" className="mt-4 inline-block text-blue-600 font-bold hover:underline">Go to Inventory Management</Link>
+                                    </div>
+                                )
+                            )}
+
+                            {historySubTab === 'route' && (
+                                routeHistoryLoading ? (
+                                    <div className="py-20 flex justify-center"><Loader text="Loading route history..." /></div>
+                                ) : routeHistory.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-gray-100 text-[11px] uppercase text-gray-400 font-black tracking-widest">
+                                                    <th className="px-6 py-4">Assigned At</th>
+                                                    <th className="px-6 py-4">Action</th>
+                                                    <th className="px-6 py-4">Previous Route</th>
+                                                    <th className="px-6 py-4">New Route</th>
+                                                    <th className="px-6 py-4">Changed By</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {routeHistory.map(record => (
+                                                    <tr key={record._id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-bold">
+                                                            <div className="flex items-center gap-2">
+                                                                <Calendar size={14} className="text-gray-400" />
+                                                                {new Date(record.assignedAt).toLocaleString()}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="px-2 py-1 rounded text-[10px] font-bold uppercase bg-blue-50 text-blue-700">
+                                                                {record.action}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                                            {record.previousRouteName || record.previousRouteId || '—'}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                                                            {record.routeName || record.routeId || '—'}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                            {record.changedBy || '—'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="py-20 text-center text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100">
+                                        <MapPin className="mx-auto mb-3 opacity-20" size={48} />
+                                        <p className="font-medium text-sm">No route assignment history yet.</p>
+                                        <p className="text-xs mt-1">History is recorded when a route is assigned or changed from Bus Management.</p>
+                                    </div>
+                                )
+                            )}
+
+                            {historySubTab === 'staff' && (
+                                staffHistoryLoading ? (
+                                    <div className="py-20 flex justify-center"><Loader text="Loading staff history..." /></div>
+                                ) : staffHistory.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-gray-100 text-[11px] uppercase text-gray-400 font-black tracking-widest">
+                                                    <th className="px-6 py-4">Role</th>
+                                                    <th className="px-6 py-4">Name</th>
+                                                    <th className="px-6 py-4">Entry Date</th>
+                                                    <th className="px-6 py-4">Exit Date</th>
+                                                    <th className="px-6 py-4">Status</th>
+                                                    <th className="px-6 py-4">Changed By</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {staffHistory.map(record => (
+                                                    <tr key={record._id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4">
+                                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${record.role === 'driver' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                                                                {record.role}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm font-bold text-gray-900">{record.staffName}</td>
+                                                        <td className="px-6 py-4 text-sm text-gray-700">
+                                                            {record.entryDate ? new Date(record.entryDate).toLocaleDateString() : '—'}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-700">
+                                                            {record.exitDate ? new Date(record.exitDate).toLocaleDateString() : '—'}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`text-xs font-bold ${record.isCurrent ? 'text-green-700' : 'text-gray-500'}`}>
+                                                                {record.isCurrent ? 'Current' : 'Past'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                            {record.changedBy || '—'}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="py-20 text-center text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100">
+                                        <UserCheck className="mx-auto mb-3 opacity-20" size={48} />
+                                        <p className="font-medium text-sm">No driver or cleaner history yet.</p>
+                                        <p className="text-xs mt-1">History is recorded when staff is changed from Edit Bus Details.</p>
+                                    </div>
+                                )
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
