@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
-import { Download, CreditCard, History, Users as UsersIcon, Package, Calendar, Tag } from 'lucide-react';
+import { Download, FileText, History, Users as UsersIcon, Package, Calendar, Tag } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import PassengerReport from '../components/PassengerReport';
-import BusPassCard from '../components/BusPassCard';
+import TransportAdmitCard from '../components/TransportAdmitCard';
 import Loader from '../components/Loader';
 import { apiFetch, API_BASE } from '../utils/api';
+import { triggerAdmitCardPrint } from '../utils/printAdmitCard';
 
 const API = API_BASE;
 
@@ -49,28 +51,30 @@ const BusDetails = () => {
         documentTitle: `Transport-Passenger-Report-${id}`
     });
 
-    const [selectedPassPassenger, setSelectedPassPassenger] = useState(null);
-    const passCardRef = useRef();
-    const handlePrintPass = useReactToPrint({
-        contentRef: passCardRef,
-        documentTitle: selectedPassPassenger ? `Bus-Pass-${selectedPassPassenger.admission_number || selectedPassPassenger.emp_no || selectedPassPassenger.admission_no || selectedPassPassenger.empNo}` : 'Bus-Pass'
+    const [selectedAdmitPassenger, setSelectedAdmitPassenger] = useState(null);
+    const admitCardRef = useRef();
+    const handlePrintAdmitCard = useReactToPrint({
+        contentRef: admitCardRef,
+        documentTitle: selectedAdmitPassenger
+            ? `Transport-Admit-Card-${selectedAdmitPassenger.admission_number || selectedAdmitPassenger.emp_no || selectedAdmitPassenger.admission_no}`
+            : 'Transport-Admit-Card'
     });
 
-    const handlePrintPassClick = async (p) => {
+    const handlePrintAdmitCardClick = async (p) => {
         if (fetchingPass) return;
         setFetchingPass(true);
         try {
             const response = await apiFetch(`${API}/transport-requests/${p.id}/full-details`);
             if (response.ok) {
                 const fullPassenger = await response.json();
-                setSelectedPassPassenger(fullPassenger);
-                setTimeout(() => handlePrintPass(), 150);
+                flushSync(() => setSelectedAdmitPassenger(fullPassenger));
+                await triggerAdmitCardPrint(handlePrintAdmitCard, admitCardRef);
             } else {
-                alert("Failed to fetch full passenger details for printing.");
+                alert('Failed to fetch passenger details for admit card.');
             }
         } catch (error) {
-            console.error("Error fetching pass details:", error);
-            alert("Error preparing bus pass.");
+            console.error('Error fetching admit card details:', error);
+            alert('Error preparing admit card.');
         } finally {
             setFetchingPass(false);
         }
@@ -417,7 +421,7 @@ const BusDetails = () => {
                                             <th className="p-4">Academic Year</th>
                                             <th className="p-4">Stage</th>
                                             <th className="p-4">Fare</th>
-                                            <th className="p-4 text-right">Actions</th>
+                                            <th className="p-4 text-right">Admit Card</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
@@ -467,11 +471,12 @@ const BusDetails = () => {
                                                     <button
                                                         type="button"
                                                         disabled={fetchingPass}
-                                                        onClick={() => handlePrintPassClick(p)}
-                                                        className={`p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all hover:scale-110 ${fetchingPass ? 'animate-pulse opacity-50' : ''}`}
-                                                        title="Print Bus Pass"
+                                                        onClick={() => handlePrintAdmitCardClick(p)}
+                                                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-blue-700 bg-blue-50 text-xs font-semibold hover:bg-blue-100 transition-all ${fetchingPass ? 'animate-pulse opacity-50' : ''}`}
+                                                        title="Print Admit Card"
                                                     >
-                                                        <CreditCard size={18} />
+                                                        <FileText size={16} />
+                                                        Print
                                                     </button>
                                                     )}
                                                 </td>
@@ -538,7 +543,15 @@ const BusDetails = () => {
                 )}
             </div>
             
-            <BusPassCard ref={passCardRef} passenger={selectedPassPassenger} />
+            <TransportAdmitCard
+                ref={admitCardRef}
+                passenger={selectedAdmitPassenger}
+                busMeta={{
+                    driverName: bus.driverName,
+                    attendantName: bus.attendantName,
+                    routeName: route?.routeName,
+                }}
+            />
 
             <Modal isOpen={assignModalOpen} onClose={() => setAssignModalOpen(false)} title="Assign passengers to this bus">
                 {!data?.bus?.assignedRouteId ? (

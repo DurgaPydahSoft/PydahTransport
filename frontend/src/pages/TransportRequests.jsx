@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useReactToPrint } from 'react-to-print';
-import { CreditCard, Trash2, Calendar, Pencil, Users } from 'lucide-react';
+import { FileText, Trash2, Calendar, Pencil, Users, CheckCircle2, XCircle, User, MapPin, GraduationCap, Clock, Bus } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
-import BusPassCard from '../components/BusPassCard';
+import TransportAdmitCard from '../components/TransportAdmitCard';
 import Loader from '../components/Loader';
 import { apiFetch, API_BASE } from '../utils/api';
+import { triggerAdmitCardPrint } from '../utils/printAdmitCard';
 
 const statusDisplay = (s) => (s || 'pending').charAt(0).toUpperCase() + (s || 'pending').slice(1);
 
@@ -55,32 +57,43 @@ const TransportRequests = () => {
     const [courseExpiryEdits, setCourseExpiryEdits] = useState({});
     const [courseExpirySchemaOk, setCourseExpirySchemaOk] = useState(true);
     const [editingYears, setEditingYears] = useState({});
+    const [detailModal, setDetailModal] = useState({ open: false, request: null });
     const academicYearOptions = getAcademicYearOptions();
 
-    const passComponentRef = useRef();
-    const handlePrintPass = useReactToPrint({
-        contentRef: passComponentRef,
-        documentTitle: selectedPassPassenger ? `Bus-Pass-${selectedPassPassenger.admission_number || selectedPassPassenger.emp_no || selectedPassPassenger.admission_no || selectedPassPassenger.empNo}` : 'Bus-Pass'
+    const admitCardRef = useRef();
+    const handlePrintAdmitCard = useReactToPrint({
+        contentRef: admitCardRef,
+        documentTitle: selectedPassPassenger
+            ? `Transport-Admit-Card-${selectedPassPassenger.admission_number || selectedPassPassenger.emp_no || selectedPassPassenger.admission_no}`
+            : 'Transport-Admit-Card'
     });
 
-    const handlePrintPassClick = async (p) => {
+    const handlePrintAdmitCardClick = async (p) => {
         if (fetchingPass) return;
         setFetchingPass(true);
         try {
             const response = await apiFetch(`${API_BASE}/transport-requests/${p.id}/full-details`);
             if (response.ok) {
                 const fullPassenger = await response.json();
-                setSelectedPassPassenger(fullPassenger);
-                setTimeout(() => handlePrintPass(), 150);
+                flushSync(() => setSelectedPassPassenger(fullPassenger));
+                await triggerAdmitCardPrint(handlePrintAdmitCard, admitCardRef);
             } else {
-                alert("Failed to fetch full passenger details for printing.");
+                alert('Failed to fetch passenger details for admit card.');
             }
         } catch (error) {
-            console.error("Error fetching pass details:", error);
-            alert("Error preparing bus pass.");
+            console.error('Error fetching admit card details:', error);
+            alert('Error preparing admit card.');
         } finally {
             setFetchingPass(false);
         }
+    };
+
+    const openDetailModal = (req) => {
+        setDetailModal({ open: true, request: req });
+    };
+
+    const closeDetailModal = () => {
+        setDetailModal({ open: false, request: null });
     };
 
     const fetchRequests = async () => {
@@ -397,6 +410,7 @@ const TransportRequests = () => {
     };
 
     const handleApprove = (id) => {
+        closeDetailModal();
         openApproveModal(id);
     };
 
@@ -410,6 +424,7 @@ const TransportRequests = () => {
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
                 setMessage({ text: data.message || 'Request rejected.', type: 'success' });
+                closeDetailModal();
                 fetchRequests();
             } else {
                 setMessage({ text: data.message || 'Failed to reject', type: 'error' });
@@ -440,6 +455,7 @@ const TransportRequests = () => {
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
                 setMessage({ text: data.message || 'Request deleted successfully.', type: 'success' });
+                closeDetailModal();
                 fetchRequests();
             } else {
                 setMessage({ text: data.message || 'Failed to delete request', type: 'error' });
@@ -647,12 +663,15 @@ const TransportRequests = () => {
                                     <th className="p-4">Fare</th>
                                     <th className="p-4">Status</th>
                                     <th className="p-4">Date</th>
-                                    <th className="p-4">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 text-sm text-gray-700">
                                 {currentRequests.map((req) => (
-                                    <tr key={req.id} className="hover:bg-gray-50 transition-colors">
+                                    <tr
+                                        key={req.id}
+                                        onClick={() => openDetailModal(req)}
+                                        className="hover:bg-blue-50/60 transition-colors cursor-pointer"
+                                    >
                                         <td className="p-4">
                                             <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${req.user_type === 'employee' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                                                 {req.user_type || 'student'}
@@ -695,60 +714,163 @@ const TransportRequests = () => {
                                         <td className="p-4 text-gray-500">
                                             {new Date(req.request_date).toLocaleDateString()}
                                         </td>
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-2">
-                                                {isPending(req) && (
-                                                    <>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleApprove(req.id)}
-                                                            disabled={actionLoading !== null}
-                                                            className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                                        >
-                                                            Approve
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleReject(req.id)}
-                                                            disabled={actionLoading !== null}
-                                                            className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                                        >
-                                                            {actionLoading === req.id ? '...' : 'Reject'}
-                                                        </button>
-                                                    </>
-                                                )}
-                                                {req.status === 'approved' && !isExpiredPass(req) && (
-                                                    <button
-                                                        type="button"
-                                                        disabled={fetchingPass}
-                                                        onClick={() => handlePrintPassClick(req)}
-                                                        className={`p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-all hover:scale-110 ${fetchingPass ? 'animate-pulse opacity-50' : ''}`}
-                                                        title="Print Bus Pass"
-                                                    >
-                                                        <CreditCard size={18} />
-                                                    </button>
-                                                )}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDelete(req.id)}
-                                                    disabled={actionLoading !== null}
-                                                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-50 transition-all hover:scale-110"
-                                                    title="Delete Request"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </div>
-                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                     
-                    <BusPassCard ref={passComponentRef} passenger={selectedPassPassenger} />
+                    <TransportAdmitCard ref={admitCardRef} passenger={selectedPassPassenger} />
                 </div>
             )
             }
+
+            <Modal
+                isOpen={detailModal.open}
+                onClose={closeDetailModal}
+                title="Passenger Request"
+                maxWidth="max-w-5xl"
+                noScroll
+            >
+                {detailModal.request && (() => {
+                    const req = detailModal.request;
+                    const name = req.student_name || req.employee_name || '—';
+                    const idNo = req.admission_number || req.emp_no || '—';
+                    const isEmployee = req.user_type === 'employee';
+                    const statusKey = (req.status || '').toLowerCase();
+                    const statusStyles = isExpiredPass(req)
+                        ? 'bg-red-50 text-red-700 ring-red-100'
+                        : statusKey === 'approved'
+                            ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+                            : statusKey === 'pending'
+                                ? 'bg-amber-50 text-amber-700 ring-amber-100'
+                                : 'bg-slate-100 text-slate-600 ring-slate-200';
+
+                    const DetailItem = ({ icon: Icon, label, value }) => (
+                        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-slate-50/80 border border-slate-100 min-w-0">
+                            <div className="p-1.5 rounded-md bg-white text-slate-500 shrink-0 border border-slate-100">
+                                <Icon size={14} />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 leading-none">{label}</p>
+                                <p className="text-sm font-semibold text-slate-900 mt-0.5 truncate" title={value}>{value}</p>
+                            </div>
+                        </div>
+                    );
+
+                    return (
+                        <div className="space-y-4">
+                            <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 text-white">
+                                <div className="relative flex items-center justify-between gap-4">
+                                    <div className="min-w-0 flex items-center gap-4">
+                                        <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                                            <User size={22} className="text-white/90" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h4 className="text-lg font-bold leading-tight truncate">{name}</h4>
+                                            <p className="text-xs text-slate-300 font-medium">ID · {idNo}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide ring-1 ${isEmployee ? 'bg-purple-500/20 text-purple-200 ring-purple-400/30' : 'bg-blue-500/20 text-blue-200 ring-blue-400/30'}`}>
+                                            {req.user_type || 'student'}
+                                        </span>
+                                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ring-1 ${statusStyles}`}>
+                                            {isExpiredPass(req) ? 'Expired' : statusDisplay(req.status)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-5 items-start">
+                                <div className="space-y-4 min-w-0">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Passenger Information</p>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                            <DetailItem icon={User} label="Full Name" value={name} />
+                                            <DetailItem icon={User} label="ID Number" value={idNo} />
+                                            {!isEmployee && (
+                                                <>
+                                                    <DetailItem icon={GraduationCap} label="Course" value={req.course || '—'} />
+                                                    <DetailItem icon={GraduationCap} label="Year" value={req.year_of_study != null ? `Year ${req.year_of_study}` : '—'} />
+                                                </>
+                                            )}
+                                            <DetailItem icon={Calendar} label="Academic Year" value={req.academic_year || '—'} />
+                                            <DetailItem icon={Clock} label="Requested" value={formatDate(req.request_date)} />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Transport Details</p>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                            <DetailItem icon={MapPin} label="Route" value={req.route_name || '—'} />
+                                            <DetailItem icon={Bus} label="Stage" value={req.stage_name || '—'} />
+                                            <DetailItem
+                                                icon={FileText}
+                                                label="Fare"
+                                                value={isEmployee ? 'Free (₹0)' : `₹${req.fare ?? '—'}`}
+                                            />
+                                            {req.effective_expiry_date && !isEmployee ? (
+                                                <DetailItem icon={Clock} label="Valid Until" value={formatDate(req.effective_expiry_date)} />
+                                            ) : (
+                                                <DetailItem icon={Bus} label="Bus" value={req.bus_id || 'Unassigned'} />
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="lg:border-l lg:pl-5 border-slate-100">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Actions</p>
+                                    <div className="space-y-2">
+                                        {isPending(req) && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleApprove(req.id)}
+                                                    disabled={actionLoading !== null}
+                                                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors"
+                                                >
+                                                    <CheckCircle2 size={17} />
+                                                    Approve
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleReject(req.id)}
+                                                    disabled={actionLoading !== null}
+                                                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white text-amber-700 text-sm font-bold border border-amber-200 hover:bg-amber-50 disabled:opacity-50 transition-colors"
+                                                >
+                                                    <XCircle size={17} />
+                                                    {actionLoading === req.id ? 'Rejecting…' : 'Reject'}
+                                                </button>
+                                            </>
+                                        )}
+                                        {req.status === 'approved' && !isExpiredPass(req) && (
+                                            <button
+                                                type="button"
+                                                disabled={fetchingPass}
+                                                onClick={() => handlePrintAdmitCardClick(req)}
+                                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-50 shadow-sm transition-colors"
+                                            >
+                                                <FileText size={17} />
+                                                {fetchingPass ? 'Preparing…' : 'Print Admit Card'}
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDelete(req.id)}
+                                            disabled={actionLoading !== null}
+                                            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-red-600 text-xs font-bold hover:bg-red-50 disabled:opacity-50 transition-colors"
+                                        >
+                                            <Trash2 size={14} />
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+            </Modal>
 
             <Modal
                 isOpen={courseExpiryModalOpen}

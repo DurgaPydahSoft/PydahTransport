@@ -27,43 +27,112 @@ const STUDENT_JOINS_SQL = `
     LEFT JOIN students s1 ON tr.admission_number = s1.admission_number
     LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL`;
 
-function getActivePassengerSqlParts(academicYear) {
-    const ay = academicYear || getDefaultAcademicYear();
+function getActivePassengerSqlParts(fallbackAcademicYear) {
+    const fallback = fallbackAcademicYear || getDefaultAcademicYear();
+    // Match course expiry to each request's academic year — not only the filter/default year.
     return {
-        academicYear: ay,
+        academicYear: fallback,
         studentJoins: STUDENT_JOINS_SQL,
         expiryJoins: `
             LEFT JOIN courses c_act ON c_act.name = COALESCE(s1.course, s2.course)
             LEFT JOIN course_transport_expiry cte ON cte.course_id = c_act.id
-              AND cte.academic_year = ?
+              AND cte.academic_year = COALESCE(tr.academic_year, ?)
               AND cte.year_of_study = COALESCE(s1.current_year, s2.current_year, tr.year_of_study, 1)`,
         activeWhere: `(COALESCE(cte.expiry_date, tr.expiry_date) IS NULL OR CURDATE() <= COALESCE(cte.expiry_date, tr.expiry_date))`,
         effectiveExpiryExpr: `COALESCE(cte.expiry_date, tr.expiry_date)`,
         isExpiredExpr: `(tr.status = 'approved' AND COALESCE(cte.expiry_date, tr.expiry_date) IS NOT NULL AND CURDATE() > COALESCE(cte.expiry_date, tr.expiry_date))`,
-        expiryParams: [ay],
+        expiryParams: [fallback],
     };
 }
 
-// Get the last semester of the student's year (expiry = end of that semester).
+function academicYearDateRange(academicYear) {
+    const ay = academicYear || getDefaultAcademicYear();
+    const parts = String(ay).split('-').map((n) => Number(n));
+    if (parts.length !== 2 || parts.some((n) => Number.isNaN(n))) {
+        return null;
+    }
+    const [startYear, endYear] = parts;
+    return {
+        start: `${startYear}-07-01`,
+        end: `${endYear}-06-30`,
+    };
+}
+
+// Last semester of the student's year within the transport request's academic session.
 async function getLastSemesterForRequest(mysqlPool, transportRequest) {
     const admissionNumber = transportRequest.admission_number || transportRequest.admission_no;
     if (!admissionNumber) return null;
+
+    const requestAcademicYear = transportRequest.academic_year
+        || process.env.CURRENT_ACADEMIC_YEAR
+        || getDefaultAcademicYear();
+    const ayRange = academicYearDateRange(requestAcademicYear);
+
     const [studentRows] = await mysqlPool.query(
         'SELECT course, current_year FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
         [admissionNumber, admissionNumber]
     );
     const student = studentRows[0];
     if (!student || !student.course) return null;
+
     const [courseRows] = await mysqlPool.query('SELECT id FROM courses WHERE name = ? LIMIT 1', [student.course]);
     const course = courseRows[0];
     if (!course) return null;
-    const yearOfStudy = student.current_year != null ? Number(student.current_year) : 1;
-    const [semRows] = await mysqlPool.query(
-        'SELECT id, college_id, course_id, academic_year_id, year_of_study, semester_number, start_date, end_date FROM semesters WHERE course_id = ? AND year_of_study = ? ORDER BY academic_year_id DESC, semester_number DESC LIMIT 1',
-        [course.id, yearOfStudy]
+
+    const yearOfStudy = student.current_year != null
+        ? Number(student.current_year)
+        : (transportRequest.year_of_study != null ? Number(transportRequest.year_of_study) : 1);
+
+    // Prefer course-level expiry configured for this academic year.
+    const [cteRows] = await mysqlPool.query(
+        `SELECT expiry_date FROM course_transport_expiry
+         WHERE course_id = ? AND academic_year = ? AND year_of_study = ?
+         LIMIT 1`,
+        [course.id, requestAcademicYear, yearOfStudy]
     );
-    const row = semRows[0];
+    if (cteRows[0]?.expiry_date) {
+        const expiryDate = cteRows[0].expiry_date;
+        return {
+            id: null,
+            college_id: null,
+            course_id: course.id,
+            academic_year_id: null,
+            year_of_study: yearOfStudy,
+            semester_number: null,
+            start_date: null,
+            end_date: expiryDate,
+            expiry_date: expiryDate,
+            label: `Course expiry (${requestAcademicYear}, Year ${yearOfStudy})`,
+        };
+    }
+
+    let semRows;
+    if (ayRange) {
+        [semRows] = await mysqlPool.query(
+            `SELECT id, college_id, course_id, academic_year_id, year_of_study, semester_number, start_date, end_date
+             FROM semesters
+             WHERE course_id = ? AND year_of_study = ?
+               AND end_date >= ? AND end_date <= ?
+             ORDER BY end_date DESC
+             LIMIT 1`,
+            [course.id, yearOfStudy, ayRange.start, ayRange.end]
+        );
+    }
+
+    if (!semRows?.[0]) {
+        [semRows] = await mysqlPool.query(
+            `SELECT id, college_id, course_id, academic_year_id, year_of_study, semester_number, start_date, end_date
+             FROM semesters
+             WHERE course_id = ? AND year_of_study = ? AND end_date >= CURDATE()
+             ORDER BY end_date ASC
+             LIMIT 1`,
+            [course.id, yearOfStudy]
+        );
+    }
+
+    const row = semRows?.[0];
     if (!row) return null;
+
     return {
         id: row.id,
         college_id: row.college_id,
@@ -74,7 +143,52 @@ async function getLastSemesterForRequest(mysqlPool, transportRequest) {
         start_date: row.start_date,
         end_date: row.end_date,
         expiry_date: row.end_date,
+        label: `End of Year ${row.year_of_study}, Sem ${row.semester_number}`,
     };
+}
+
+async function findExistingTransportRequestForYear({ admissionNumber, academicYear, userType = 'student' }) {
+    if (!admissionNumber) return null;
+
+    const resolvedYear = academicYear || process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+    const fallbackYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+
+    if (userType === 'employee') {
+        const rows = await EmployeeTransportRequest.find({
+            emp_no: admissionNumber,
+            status: { $in: ['pending', 'approved'] },
+        }).lean();
+        return rows.find((r) => (r.academic_year || fallbackYear) === resolvedYear) || null;
+    }
+
+    if (!mysqlPool) return null;
+
+    const [rows] = await mysqlPool.query(
+        `SELECT id, status, route_name, stage_name, academic_year, admission_number
+         FROM transport_requests
+         WHERE admission_number = ?
+           AND status IN ('pending', 'approved')
+           AND COALESCE(academic_year, ?) = ?
+         ORDER BY request_date DESC
+         LIMIT 1`,
+        [admissionNumber, fallbackYear, resolvedYear]
+    );
+    return rows[0] || null;
+}
+
+function buildDuplicateRequestMessage(existing, academicYear, userType) {
+    const label = userType === 'employee' ? 'employee' : 'student';
+    const status = (existing.status || 'unknown').toLowerCase();
+    const routeInfo =
+        existing.route_name && existing.stage_name
+            ? ` (${existing.route_name} – ${existing.stage_name})`
+            : '';
+
+    if (status === 'approved') {
+        return `This ${label} already has an approved transport request for academic year ${academicYear}${routeInfo}. Use Route/Stage Change instead of raising a new request.`;
+    }
+
+    return `This ${label} already has a pending transport request for academic year ${academicYear}${routeInfo}. Approve, reject, or delete it before raising another.`;
 }
 
 // Get buses and their available capacities, combining counts from MySQL (students) and MongoDB (employees)
@@ -396,12 +510,19 @@ const getPassengerFullDetails = async (req, res) => {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
 
+        const { resolveStudentPhoto } = require('../utils/studentPhoto');
+
         const [rows] = await mysqlPool.query(
             `SELECT tr.*, 
                     COALESCE(s1.course, s2.course) as course,
                     COALESCE(s1.branch, s2.branch) as branch,
                     COALESCE(s1.student_photo, s2.student_photo) as student_photo,
-                    COALESCE(s1.pin_no, s2.pin_no) as pin_no
+                    COALESCE(s1.student_data, s2.student_data) as student_data,
+                    COALESCE(s1.pin_no, s2.pin_no) as pin_no,
+                    COALESCE(s1.student_mobile, s2.student_mobile) as student_mobile,
+                    COALESCE(s1.parent_mobile1, s2.parent_mobile1) as parent_mobile1,
+                    COALESCE(s1.student_address, s2.student_address) as student_address,
+                    COALESCE(s1.father_name, s2.father_name) as father_name
              FROM transport_requests tr 
              LEFT JOIN students s1 ON tr.admission_number = s1.admission_number 
              LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
@@ -413,7 +534,12 @@ const getPassengerFullDetails = async (req, res) => {
             return res.status(404).json({ message: 'Transport request not found' });
         }
 
-        res.json({ ...rows[0], user_type: 'student' });
+        const row = rows[0];
+        res.json({
+            ...row,
+            student_photo: resolveStudentPhoto(row),
+            user_type: 'student',
+        });
     } catch (error) {
         console.error('Error fetching passenger full details:', error);
         res.status(500).json({ message: error.message });
@@ -721,7 +847,30 @@ const createTransportRequest = async (req, res) => {
 
     const resolvedAcademicYear = resolveAcademicYear({ academic_year, academicYear });
 
+    if (!admission_number) {
+        return res.status(400).json({ message: 'Admission / employee number is required.' });
+    }
+
     try {
+        const existingRequest = await findExistingTransportRequestForYear({
+            admissionNumber: admission_number,
+            academicYear: resolvedAcademicYear,
+            userType: user_type,
+        });
+
+        if (existingRequest) {
+            return res.status(409).json({
+                message: buildDuplicateRequestMessage(existingRequest, resolvedAcademicYear, user_type),
+                existingRequest: {
+                    id: existingRequest.id || String(existingRequest._id),
+                    status: existingRequest.status,
+                    route_name: existingRequest.route_name,
+                    stage_name: existingRequest.stage_name,
+                    academic_year: existingRequest.academic_year || resolvedAcademicYear,
+                },
+            });
+        }
+
         if (user_type === 'employee') {
             const newReq = new EmployeeTransportRequest({
                 emp_no: admission_number,
@@ -1377,8 +1526,26 @@ const submitRouteChangeRequest = async (req, res) => {
     }
 };
 
+// @desc    Get buses on a route with seat vacancy (for raise-request / allocation UI)
+// @route   GET /api/transport-requests/route-buses?route_id=
+// @access  Private/Admin
+const getRouteBusVacancy = async (req, res) => {
+    const routeId = req.query.route_id;
+    if (!routeId) {
+        return res.status(400).json({ message: 'route_id is required' });
+    }
+    try {
+        const busesOnRoute = await getBusesWithSeatsForRoute(routeId);
+        res.json({ route_id: routeId, busesOnRoute });
+    } catch (error) {
+        console.error('Error fetching route bus vacancy:', error);
+        res.status(500).json({ message: error.message || 'Failed to fetch bus vacancy' });
+    }
+};
+
 module.exports = {
     getTransportRequests,
+    getRouteBusVacancy,
     getSemesterOptions,
     updateTransportRequest,
     approveTransportRequest,

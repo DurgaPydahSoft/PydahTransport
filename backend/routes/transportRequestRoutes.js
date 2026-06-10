@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
     getTransportRequests,
+    getRouteBusVacancy,
     getSemesterOptions,
     updateTransportRequest,
     approveTransportRequest,
@@ -18,6 +19,7 @@ const {
 
 router.get('/', getTransportRequests);
 router.post('/', createTransportRequest);
+router.get('/route-buses', getRouteBusVacancy);
 router.get('/approved-passengers', getApprovedPassengers);
 router.post('/change-request', submitRouteChangeRequest);
 router.get('/concessions', getConcessions);

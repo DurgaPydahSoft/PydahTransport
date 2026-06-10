@@ -53,11 +53,11 @@ const Layout = ({ children }) => {
         { path: '/buses', label: 'Bus Management', permission: 'bus_management', icon: <Bus size={20} /> },
         { path: '/routes', label: 'Route Management', permission: 'route_management', icon: <Map size={20} /> },
         { path: '/fleet', label: 'Fleet & Passengers', permission: 'fleet_passengers', icon: <Users size={20} /> },
-        { path: '/inventory', label: 'Inventory Items', icon: <Package size={20} />, permission: 'inventory' },
-        { path: '/transport-requests', label: 'Passenger Requests', permission: 'transport_requests', icon: <ClipboardList size={20} /> },
         { path: '/raise-request', label: 'Raise Request', permission: 'raise_request', icon: <PlusCircle size={20} /> },
+        { path: '/transport-requests', label: 'Passenger Requests', permission: 'transport_requests', icon: <ClipboardList size={20} /> },
         { path: '/concessions', label: 'Concessions', permission: 'concessions', icon: <Percent size={20} /> },
         { path: '/transport-dues', label: 'Transport Dues', permission: 'transport_dues', icon: <CreditCard size={20} /> },
+        { path: '/inventory', label: 'Inventory Items', icon: <Package size={20} />, permission: 'inventory' },
         { path: '/users', label: 'User Management', permission: 'user_management', icon: <UserCog size={20} /> },
     ];
 

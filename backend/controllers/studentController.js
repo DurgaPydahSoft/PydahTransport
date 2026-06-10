@@ -1,5 +1,6 @@
 const { mysqlPool } = require('../config/db');
 const { getDefaultAcademicYear, resolveAcademicYear } = require('./transportRequestController');
+const { resolveStudentPhoto } = require('../utils/studentPhoto');
 
 const COURSE_EXPIRY_MIGRATION_MSG =
     'Remove the old course+academic-year-only unique key so each year can have its own date. Run: ' +
@@ -301,8 +302,57 @@ const deleteCourseExpiry = async (req, res) => {
     }
 };
 
+// @desc    Get single student profile (includes photo from students.student_photo)
+// @route   GET /api/students/profile
+// @access  Private/Admin
+const getStudentProfile = async (req, res) => {
+    const { id, admission_number, admission_no } = req.query;
+    if (!id && !admission_number && !admission_no) {
+        return res.status(400).json({ message: 'id or admission_number is required' });
+    }
+
+    try {
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
+        const profileFields = `id, admission_number, admission_no, pin_no, student_name, course, branch,
+                    current_year, current_semester, stud_type, student_photo, student_data,
+                    student_mobile, parent_mobile1, parent_mobile2, father_name, student_address,
+                    city_village, district, college, email`;
+
+        let rows;
+        if (id) {
+            [rows] = await mysqlPool.query(
+                `SELECT ${profileFields} FROM students WHERE id = ? LIMIT 1`,
+                [id]
+            );
+        } else {
+            const adm = admission_number || admission_no;
+            [rows] = await mysqlPool.query(
+                `SELECT ${profileFields} FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1`,
+                [adm, adm]
+            );
+        }
+
+        if (!rows[0]) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
+
+        const row = rows[0];
+        res.json({
+            ...row,
+            student_photo: resolveStudentPhoto(row),
+        });
+    } catch (error) {
+        console.error('Error fetching student profile:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     searchStudents,
+    getStudentProfile,
     getCourses,
     getCourseExpiry,
     setCourseExpiry,

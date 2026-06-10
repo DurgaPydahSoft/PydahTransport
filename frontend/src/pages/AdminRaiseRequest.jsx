@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Bus } from 'lucide-react';
 import Layout from '../components/Layout';
 import Loader from '../components/Loader';
+import Modal from '../components/Modal';
 import { apiFetch, API_BASE } from '../utils/api';
+import { normalizeStudentPhoto } from '../utils/studentPhoto';
+
+const formatDate = (d) => (d ? new Date(d).toLocaleDateString() : '—');
 
 const getDefaultAcademicYear = () => {
     const now = new Date();
@@ -37,6 +41,12 @@ const AdminRaiseRequest = () => {
     const [message, setMessage] = useState({ text: '', type: '' });
     const [academicYear, setAcademicYear] = useState(getDefaultAcademicYear);
     const academicYearOptions = getAcademicYearOptions();
+    const [busesOnRoute, setBusesOnRoute] = useState([]);
+    const [busesLoading, setBusesLoading] = useState(false);
+    const [approveModal, setApproveModal] = useState({ open: false, requestId: null, data: null, selectedBusId: '', loading: true, error: null });
+    const [actionLoading, setActionLoading] = useState(false);
+    const [profileLoading, setProfileLoading] = useState(false);
+    const [formError, setFormError] = useState('');
 
     // Get logged in admin info
     const adminInfo = JSON.parse(localStorage.getItem('adminInfo') || '{}');
@@ -95,25 +105,147 @@ const AdminRaiseRequest = () => {
         }
     };
 
-    const handleSelectStudent = (student) => {
+    const fetchStudentProfile = async (student) => {
+        const admissionNumber = student.admission_number || student.admission_no;
+        const studentId = student.student_id ?? student.id;
+        if (!admissionNumber && !studentId) return student;
+
+        // Approved passengers use transport_requests.id — always prefer admission_number for profile lookup
+        const params = admissionNumber
+            ? `admission_number=${encodeURIComponent(admissionNumber)}`
+            : `id=${encodeURIComponent(studentId)}`;
+
+        try {
+            const response = await apiFetch(`${API_BASE}/students/profile?${params}`);
+            if (response.ok) {
+                const profile = await response.json();
+                return { ...student, ...profile };
+            }
+        } catch (error) {
+            console.error('Error fetching student profile:', error);
+        }
+        return student;
+    };
+
+    const handleSelectStudent = async (student) => {
+        setFormError('');
         setSelectedStudent(student);
         setSelectedRoute(null);
         setSelectedStage(null);
+        setBusesOnRoute([]);
 
-        // If it's a stage-only change, pre-select the current route
         if (activeTab === 'change' && changeType === 'stage' && student.route_id) {
             const currentRoute = routes.find(r => r.routeId === student.route_id);
             if (currentRoute) {
                 setSelectedRoute(currentRoute);
             }
         }
+
+        if (userType === 'student') {
+            setProfileLoading(true);
+            const enriched = await fetchStudentProfile(student);
+            setSelectedStudent(enriched);
+            setProfileLoading(false);
+        }
     };
 
     const handleSelectRoute = (e) => {
+        setFormError('');
         const routeId = e.target.value;
         const route = routes.find(r => r.routeId === routeId);
         setSelectedRoute(route);
         setSelectedStage(null);
+        setBusesOnRoute([]);
+    };
+
+    useEffect(() => {
+        if (!selectedRoute?.routeId) {
+            setBusesOnRoute([]);
+            return;
+        }
+
+        const fetchBusVacancy = async () => {
+            setBusesLoading(true);
+            try {
+                const response = await apiFetch(
+                    `${API_BASE}/transport-requests/route-buses?route_id=${encodeURIComponent(selectedRoute.routeId)}`
+                );
+                const data = await response.json();
+                if (response.ok) {
+                    setBusesOnRoute(data.busesOnRoute || []);
+                } else {
+                    setBusesOnRoute([]);
+                }
+            } catch (error) {
+                console.error('Error fetching bus vacancy:', error);
+                setBusesOnRoute([]);
+            } finally {
+                setBusesLoading(false);
+            }
+        };
+
+        fetchBusVacancy();
+    }, [selectedRoute?.routeId]);
+
+    const openApproveModal = async (requestId) => {
+        setApproveModal({ open: true, requestId, data: null, selectedBusId: '', loading: true, error: null });
+        try {
+            const response = await apiFetch(`${API_BASE}/transport-requests/${requestId}/semester-options`);
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                let defaultBusId = '';
+                if (data.busesOnRoute && data.busesOnRoute.length === 1) {
+                    defaultBusId = data.busesOnRoute[0].busNumber;
+                }
+                setApproveModal((m) => ({ ...m, data, selectedBusId: defaultBusId, loading: false, error: null }));
+            } else {
+                setApproveModal((m) => ({ ...m, loading: false, error: data.message || 'Failed to load approval details' }));
+            }
+        } catch (err) {
+            setApproveModal((m) => ({ ...m, loading: false, error: 'Could not load approval details' }));
+        }
+    };
+
+    const closeApproveModal = () => {
+        setApproveModal({ open: false, requestId: null, data: null, selectedBusId: '', loading: true, error: null });
+    };
+
+    const handleConfirmApprove = async () => {
+        const id = approveModal.requestId;
+        if (!id) return;
+
+        if (approveModal.data?.busesOnRoute?.length > 0 && !approveModal.selectedBusId) {
+            setApproveModal((m) => ({ ...m, error: 'Please select a bus to assign the passenger to.' }));
+            return;
+        }
+
+        setActionLoading(true);
+        try {
+            const response = await apiFetch(`${API_BASE}/transport-requests/${id}/approve`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bus_id: approveModal.selectedBusId || null }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                setMessage({ text: data.message || 'Request raised and approved successfully.', type: 'success' });
+                closeApproveModal();
+                setSearchQuery('');
+                setStudents([]);
+                setApprovedStudents([]);
+                setSelectedStudent(null);
+                setSelectedRoute(null);
+                setSelectedStage(null);
+                setBusesOnRoute([]);
+                setChangeType('route');
+            } else {
+                setApproveModal((m) => ({ ...m, error: data.message || 'Failed to approve request' }));
+            }
+        } catch (err) {
+            setApproveModal((m) => ({ ...m, error: 'Something went wrong. Please try again.' }));
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -123,6 +255,7 @@ const AdminRaiseRequest = () => {
             return;
         }
 
+        setFormError('');
         setSubmitting(true);
         try {
             const isChange = activeTab === 'change';
@@ -158,25 +291,39 @@ const AdminRaiseRequest = () => {
             });
 
             if (response.ok) {
+                setFormError('');
                 const resData = await response.json();
-                const successMsg = isChange 
-                    ? `Route change processed. Fare Difference: ₹${resData.fareDifference}`
-                    : `Transport request raised successfully on behalf of the ${userType}.`;
-                
-                setMessage({ text: successMsg, type: 'success' });
-                // Reset form
-                setSearchQuery('');
-                setStudents([]);
-                setApprovedStudents([]);
-                setSelectedStudent(null);
-                setSelectedRoute(null);
-                setSelectedStage(null);
-                setChangeType('route'); // Default back
+                if (isChange) {
+                    setMessage({ text: `Route change processed. Fare Difference: ₹${resData.fareDifference}`, type: 'success' });
+                    setSearchQuery('');
+                    setStudents([]);
+                    setApprovedStudents([]);
+                    setSelectedStudent(null);
+                    setSelectedRoute(null);
+                    setSelectedStage(null);
+                    setBusesOnRoute([]);
+                    setChangeType('route');
+                } else {
+                    const requestId = resData.id || resData._id;
+                    setMessage({ text: 'Transport request raised. Complete approval below.', type: 'success' });
+                    if (requestId) {
+                        await openApproveModal(requestId);
+                    } else {
+                        setMessage({ text: 'Request raised but could not open approval dialog. Approve from Transport Requests.', type: 'error' });
+                    }
+                }
             } else {
                 const data = await response.json();
-                setMessage({ text: data.message || 'Failed to process request.', type: 'error' });
+                const errorText = data.message || 'Failed to process request.';
+                if (!isChange && response.status === 409) {
+                    setFormError(errorText);
+                } else {
+                    setFormError('');
+                    setMessage({ text: errorText, type: 'error' });
+                }
             }
         } catch (error) {
+            setFormError('');
             setMessage({ text: 'An error occurred. Please try again.', type: 'error' });
         } finally {
             setSubmitting(false);
@@ -193,13 +340,13 @@ const AdminRaiseRequest = () => {
                 
                 <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-sm self-start md:self-auto">
                     <button
-                        onClick={() => { setActiveTab('new'); setSelectedStudent(null); setStudents([]); setApprovedStudents([]); setSearchQuery(''); }}
+                        onClick={() => { setActiveTab('new'); setFormError(''); setSelectedStudent(null); setStudents([]); setApprovedStudents([]); setSearchQuery(''); }}
                         className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${activeTab === 'new' ? 'bg-white text-blue-900 shadow-md ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'}`}
                     >
                         New Enrollment
                     </button>
                     <button
-                        onClick={() => { setActiveTab('change'); setSelectedStudent(null); setStudents([]); setApprovedStudents([]); setSearchQuery(''); }}
+                        onClick={() => { setActiveTab('change'); setFormError(''); setSelectedStudent(null); setStudents([]); setApprovedStudents([]); setSearchQuery(''); }}
                         className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${activeTab === 'change' ? 'bg-white text-blue-900 shadow-md ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'}`}
                     >
                         Route/Stage Change
@@ -360,19 +507,48 @@ const AdminRaiseRequest = () => {
 
                             <div className="p-4 bg-slate-50 rounded-2xl text-sm border border-slate-100 relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-blue-100/50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
-                                <div className="relative z-10">
-                                    <p className="text-[10px] uppercase font-black text-slate-400 mb-1 tracking-widest">Selected {userType === 'employee' ? 'Employee' : 'Student'}</p>
-                                    <p className="font-black text-slate-900 text-lg uppercase leading-none">{selectedStudent.student_name || selectedStudent.employee_name}</p>
-                                    <div className="flex gap-4 mt-3">
-                                        <div className="px-2.5 py-1 bg-white rounded-lg shadow-sm border border-slate-100 inline-block min-w-[70px] text-center">
-                                            <p className="text-[8px] font-black text-slate-400 uppercase leading-none">ID Number</p>
-                                            <span className="text-xs font-bold text-blue-700">{selectedStudent.admission_number || selectedStudent.admission_no || selectedStudent.emp_no}</span>
+                                <div className="relative z-10 flex gap-4">
+                                    {userType === 'student' && (
+                                        <div className="shrink-0 w-[88px] h-[104px] rounded-xl border-2 border-white shadow-md overflow-hidden bg-white flex items-center justify-center">
+                                            {profileLoading ? (
+                                                <Loader size={24} text="" className="p-0" />
+                                            ) : normalizeStudentPhoto(selectedStudent.student_photo) ? (
+                                                <img
+                                                    src={normalizeStudentPhoto(selectedStudent.student_photo)}
+                                                    alt={selectedStudent.student_name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <span className="text-[9px] font-bold text-slate-400 uppercase text-center px-1">No Photo</span>
+                                            )}
                                         </div>
-                                        {activeTab === 'change' && (
-                                            <div className="px-2.5 py-1 bg-emerald-50 rounded-lg shadow-sm border border-emerald-100 inline-block min-w-[70px] text-center">
-                                                <p className="text-[8px] font-black text-emerald-400 uppercase leading-none">Current Fare</p>
-                                                <span className="text-xs font-bold text-emerald-700">₹{selectedStudent.fare}</span>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-[10px] uppercase font-black text-slate-400 mb-1 tracking-widest">Selected {userType === 'employee' ? 'Employee' : 'Student'}</p>
+                                        <p className="font-black text-slate-900 text-lg uppercase leading-tight">{selectedStudent.student_name || selectedStudent.employee_name}</p>
+                                        <div className="flex flex-wrap gap-2 mt-3">
+                                            <div className="px-2.5 py-1 bg-white rounded-lg shadow-sm border border-slate-100 inline-block min-w-[70px] text-center">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase leading-none">ID Number</p>
+                                                <span className="text-xs font-bold text-blue-700">{selectedStudent.admission_number || selectedStudent.admission_no || selectedStudent.emp_no}</span>
                                             </div>
+                                            {userType === 'student' && selectedStudent.pin_no && (
+                                                <div className="px-2.5 py-1 bg-white rounded-lg shadow-sm border border-slate-100 inline-block text-center">
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase leading-none">PIN</p>
+                                                    <span className="text-xs font-bold text-slate-700">{selectedStudent.pin_no}</span>
+                                                </div>
+                                            )}
+                                            {activeTab === 'change' && (
+                                                <div className="px-2.5 py-1 bg-emerald-50 rounded-lg shadow-sm border border-emerald-100 inline-block min-w-[70px] text-center">
+                                                    <p className="text-[8px] font-black text-emerald-400 uppercase leading-none">Current Fare</p>
+                                                    <span className="text-xs font-bold text-emerald-700">₹{selectedStudent.fare}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {userType === 'student' && selectedStudent.course && (
+                                            <p className="text-xs text-slate-500 mt-2 font-medium">
+                                                {selectedStudent.course}{selectedStudent.branch ? ` · ${selectedStudent.branch}` : ''}
+                                                {selectedStudent.current_year ? ` · Year ${selectedStudent.current_year}` : ''}
+                                            </p>
                                         )}
                                     </div>
                                 </div>
@@ -386,7 +562,7 @@ const AdminRaiseRequest = () => {
                                         </label>
                                         <select
                                             value={academicYear}
-                                            onChange={(e) => setAcademicYear(e.target.value)}
+                                            onChange={(e) => { setAcademicYear(e.target.value); setFormError(''); }}
                                             className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700 appearance-none bg-white"
                                             required
                                         >
@@ -416,10 +592,40 @@ const AdminRaiseRequest = () => {
                                 </div>
 
                                 {selectedRoute && (
+                                    <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-4 rounded-2xl border border-blue-100 bg-blue-50/60">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <Bus size={16} className="text-blue-700" />
+                                            <p className="text-xs font-black text-blue-800 uppercase tracking-widest">Route Bus Vacancy</p>
+                                        </div>
+                                        {busesLoading ? (
+                                            <p className="text-sm text-blue-600">Loading bus availability...</p>
+                                        ) : busesOnRoute.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {busesOnRoute.map((b) => (
+                                                    <div
+                                                        key={b.busNumber}
+                                                        className="flex items-center justify-between p-3 bg-white rounded-xl border border-blue-100 text-sm"
+                                                    >
+                                                        <span className="font-bold text-slate-800">{b.busNumber}</span>
+                                                        <span className={`text-xs font-semibold ${b.seatsAvailable > 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                                            {b.seatsFilled}/{b.capacity} filled · {b.seatsAvailable} available
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-blue-700">
+                                                No buses assigned to this route yet. Assign buses in Bus Management first.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {selectedRoute && (
                                     <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                                         <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">New Stage (Stop Point)</label>
                                         <select
-                                            onChange={(e) => setSelectedStage(selectedRoute.stages.find(s => s.stageName === e.target.value))}
+                                            onChange={(e) => { setFormError(''); setSelectedStage(selectedRoute.stages.find(s => s.stageName === e.target.value)); }}
                                             className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700 appearance-none bg-white"
                                             required
                                         >
@@ -453,6 +659,13 @@ const AdminRaiseRequest = () => {
                                         )}
                                     </div>
                                 )}
+
+                                {formError && (
+                                    <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-800 text-sm leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
+                                        <p className="font-bold text-red-900 text-xs uppercase tracking-wide mb-1">Cannot raise request</p>
+                                        <p>{formError}</p>
+                                    </div>
+                                )}
                             </div>
 
                             <button
@@ -463,7 +676,7 @@ const AdminRaiseRequest = () => {
                                 {submitting ? (
                                     <>Processing...</>
                                 ) : (
-                                    <>{activeTab === 'new' ? 'Confirm Enrollment' : 'Confirm Route Change'}</>
+                                    <>{activeTab === 'new' ? 'Raise & Approve' : 'Confirm Route Change'}</>
                                 )}
                             </button>
                         </form>
@@ -476,6 +689,90 @@ const AdminRaiseRequest = () => {
                     )}
                 </div>
             </div>
+
+            <Modal
+                isOpen={approveModal.open}
+                onClose={closeApproveModal}
+                title="Approve transport request"
+            >
+                {approveModal.loading && (
+                    <p className="text-gray-500 py-4">Loading…</p>
+                )}
+                {approveModal.error && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-4">
+                        {approveModal.error}
+                    </div>
+                )}
+                {!approveModal.loading && approveModal.data && (
+                    <>
+                        <div className="mb-4 p-3 bg-gray-50 rounded-xl text-sm">
+                            <p><span className="font-medium text-gray-600">{approveModal.data.user_type === 'employee' ? 'Employee' : 'Student'}:</span> {approveModal.data.studentName}</p>
+                            <p><span className="font-medium text-gray-600">ID Number:</span> {approveModal.data.admissionNumber}</p>
+                            {approveModal.data.user_type !== 'employee' && (
+                                <p><span className="font-medium text-gray-600">Course / Year:</span> {approveModal.data.course} – Year {approveModal.data.yearOfStudy}</p>
+                            )}
+                        </div>
+                        {approveModal.data.route_name && (
+                            <div className="mb-4 p-4 rounded-xl border border-blue-100 bg-blue-50">
+                                <p className="text-sm font-semibold text-blue-900 mb-2">Route: {approveModal.data.route_name} {approveModal.data.route_id && <span className="text-blue-600">({approveModal.data.route_id})</span>}</p>
+                                {approveModal.data.busesOnRoute && approveModal.data.busesOnRoute.length > 0 ? (
+                                    <>
+                                        <p className="text-xs font-semibold text-blue-800 mb-2">Select a Bus to Assign:</p>
+                                        <select
+                                            value={approveModal.selectedBusId}
+                                            onChange={(e) => setApproveModal((m) => ({ ...m, selectedBusId: e.target.value, error: null }))}
+                                            className="w-full text-sm p-2 border border-blue-200 rounded outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                                        >
+                                            <option value="">-- Choose Bus --</option>
+                                            {approveModal.data.busesOnRoute.map((b) => (
+                                                <option key={b.busNumber} value={b.busNumber}>
+                                                    {b.busNumber} (Filled: {b.seatsFilled}/{b.capacity} | {b.seatsAvailable} available)
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </>
+                                ) : (
+                                    <p className="text-sm text-blue-700">No buses assigned to this route yet. Assign in Bus Management → Bus–Route mapping.</p>
+                                )}
+                            </div>
+                        )}
+                        {approveModal.data.user_type !== 'employee' ? (
+                            <>
+                                <p className="text-sm text-gray-700 mb-2">Transport is valid until the <strong>end of the academic year</strong> (last semester), regardless of which sem the student applied in.</p>
+                                {approveModal.data.expiry ? (
+                                    <div className="p-4 rounded-xl border border-green-200 bg-green-50 text-green-800">
+                                        <p className="font-semibold">Expiry date: {formatDate(approveModal.data.expiry.expiry_date)}</p>
+                                        <p className="text-sm mt-1">{approveModal.data.expiry.label}</p>
+                                    </div>
+                                ) : (
+                                    <p className="text-gray-500 py-2">No semester config found for this course/year. Approval will still succeed; expiry will not be set.</p>
+                                )}
+                            </>
+                        ) : (
+                            <p className="text-sm font-medium p-4 rounded-xl border bg-purple-50 text-purple-800 border-purple-200">
+                                Employee transport requests do not have academic expiry dates and are free of charge.
+                            </p>
+                        )}
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                type="button"
+                                onClick={handleConfirmApprove}
+                                disabled={actionLoading}
+                                className="flex-1 bg-green-600 text-white font-semibold py-3 rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {actionLoading ? 'Approving…' : 'Confirm & Approve'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={closeApproveModal}
+                                className="px-4 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </>
+                )}
+            </Modal>
         </Layout>
     );
 };
