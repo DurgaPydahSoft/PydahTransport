@@ -138,18 +138,26 @@ const BusIdCardBack = ({ passenger, isTemplate = false }) => (
                 )}
             </div>
             <div className="id-back-text">
-                <div className="id-back-text-terms">
-                    <p className="id-back-line">1st Term: On or before First Semester starting Date.</p>
-                    <p className="id-back-line">2nd Term: On or before Second Semester starting Date.</p>
-                </div>
-                <div className="id-back-text-rules">
-                    <p className="id-back-rule-line">
-                        1. Student should compulsory be available at the bus stage before 15 min of the time allotted
-                    </p>
-                    <p className="id-back-rule-line">
-                        2. late fee of Rs.500/- will be applicable for each term if not paid on or before the above due dates
-                    </p>
-                </div>
+                <table className="id-back-text-table">
+                    <tbody>
+                        <tr>
+                            <td className="id-back-text-terms">
+                                <p className="id-back-line">1st Term: On or before First Semester starting Date.</p>
+                                <p className="id-back-line">2nd Term: On or before Second Semester starting Date.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td className="id-back-text-rules">
+                                <p className="id-back-rule-line">
+                                    1. Student should compulsory be available at the bus stage before 15 min of the time allotted
+                                </p>
+                                <p className="id-back-rule-line">
+                                    2. late fee of Rs.500/- will be applicable for each term if not paid on or before the above due dates
+                                </p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -214,10 +222,16 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                             border-color: #000 !important;
                         }
                         .id-back-text {
-                            border-left-color: #000 !important;
+                            border-left-color: transparent !important;
+                        }
+                        .id-back-qr-box {
+                            border-right-color: #000 !important;
                         }
                         .id-back-text-terms {
                             border-bottom-color: #000 !important;
+                        }
+                        .id-back-text-table td {
+                            border-color: #000 !important;
                         }
                         .id-card-table td {
                             border-color: #000 !important;
@@ -237,13 +251,17 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                         page-break-inside: avoid;
                     }
                     .bus-id-page--5 {
-                        --h-gutter: 3mm;
-                        --v-gutter: 4mm;
+                        --h-gutter: 4mm;
+                        --v-gutter: 5mm;
+                        --card-side-inset: 3.5mm;
+                        --card-cut-inset: 1.5mm;
                         --card-row-height: calc((289mm - 2px - (4 * var(--h-gutter))) / 5);
                     }
                     .bus-id-page--6 {
-                        --h-gutter: 2.5mm;
-                        --v-gutter: 3.5mm;
+                        --h-gutter: 3.5mm;
+                        --v-gutter: 4.5mm;
+                        --card-side-inset: 3mm;
+                        --card-cut-inset: 1.2mm;
                         --card-row-height: calc((289mm - 2px - (5 * var(--h-gutter))) / 6);
                     }
                     .bus-id-sheet {
@@ -267,7 +285,7 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                         box-sizing: border-box;
                         page-break-inside: avoid;
                         overflow: hidden;
-                        padding: 0 0.5mm;
+                        padding: var(--card-cut-inset) var(--card-side-inset);
                     }
                     .id-card-h-divider {
                         flex: 0 0 var(--h-gutter);
@@ -293,6 +311,12 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                         box-sizing: border-box;
                         display: flex;
                         flex-direction: column;
+                    }
+                    .id-card-half--front {
+                        margin-right: var(--card-cut-inset);
+                    }
+                    .id-card-half--back {
+                        margin-left: var(--card-cut-inset);
                     }
                     .id-card-v-divider {
                         flex: 0 0 var(--v-gutter);
@@ -467,7 +491,7 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                         align-items: stretch;
                         height: 100%;
                         width: 100%;
-                        padding: 0;
+                        padding: 0.6mm;
                         margin: 0;
                         box-sizing: border-box;
                         gap: 0;
@@ -478,23 +502,24 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                         max-width: 25%;
                         height: 100%;
                         display: flex;
-                        align-items: stretch;
+                        align-items: center;
                         justify-content: center;
                         box-sizing: border-box;
-                        padding: 0 0.5mm 0 0;
+                        padding: 1mm 1.2mm 1mm 0.8mm;
                         background: #fff;
+                        border-right: 1px solid #000;
                     }
                     .id-back-qr-square,
                     .id-back-qr-image {
-                        height: 100%;
-                        width: auto;
+                        width: 100%;
+                        height: auto;
                         max-width: 100%;
+                        max-height: 100%;
                         aspect-ratio: 1 / 1;
                         border: 1px solid #000;
                         display: block;
                         box-sizing: border-box;
                         background: #fff;
-                        margin: 0 auto;
                         object-fit: contain;
                     }
                     .id-back-qr-square {
@@ -511,69 +536,67 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                         font-size: 6pt;
                     }
                     .id-back-text {
-                        flex: 0 0 75%;
-                        width: 75%;
-                        max-width: 75%;
+                        flex: 1 1 0;
                         min-width: 0;
                         height: 100%;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: stretch;
-                        text-align: left;
                         padding: 0;
-                        border-left: 1px solid #000;
+                        border-left: none;
                         box-sizing: border-box;
-                        gap: 0;
                         overflow: hidden;
+                    }
+                    .id-back-text-table {
+                        width: 100%;
+                        height: 100%;
+                        border-collapse: collapse;
+                        table-layout: fixed;
+                    }
+                    .id-back-text-table tr {
+                        height: 50%;
                     }
                     .id-back-text-terms,
                     .id-back-text-rules {
-                        flex: 1 1 50%;
-                        height: 50%;
-                        min-height: 0;
+                        vertical-align: middle;
+                        text-align: left;
                         box-sizing: border-box;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        padding-left: 2mm;
-                        padding-right: 1.2mm;
                     }
                     .id-back-text-terms {
                         border-bottom: 1px solid #000;
-                        padding-top: 1mm;
-                        padding-bottom: 1.4mm;
+                        padding: 1.8mm 1.5mm 2.2mm 2.8mm;
                     }
                     .id-back-text-rules {
-                        padding-top: 1.4mm;
-                        padding-bottom: 1.2mm;
-                        gap: 1mm;
+                        padding: 2.2mm 1.5mm 1.8mm 2.8mm;
                     }
-                    .bus-id-page--5 .id-back-text-terms {
-                        font-size: 9pt;
+                    .bus-id-page--5 .id-back-text-terms,
+                    .bus-id-page--5 .id-back-text-terms .id-back-line {
+                        font-size: 8.5pt;
                     }
-                    .bus-id-page--6 .id-back-text-terms {
-                        font-size: 8pt;
+                    .bus-id-page--6 .id-back-text-terms,
+                    .bus-id-page--6 .id-back-text-terms .id-back-line {
+                        font-size: 7.5pt;
                     }
                     .bus-id-page--5 .id-back-rule-line {
-                        font-size: 9pt;
+                        font-size: 8.5pt;
                     }
                     .bus-id-page--6 .id-back-rule-line {
-                        font-size: 8pt;
+                        font-size: 7.5pt;
                     }
                     .id-back-line {
                         margin: 0;
                         padding: 0;
-                        line-height: 1.35;
+                        line-height: 1.3;
                         font-weight: 700;
                     }
                     .id-back-text-terms .id-back-line + .id-back-line {
-                        margin-top: 0.8mm;
+                        margin-top: 0.6mm;
                     }
                     .id-back-rule-line {
                         margin: 0;
                         padding: 0;
-                        line-height: 1.4;
+                        line-height: 1.32;
                         font-weight: 700;
+                    }
+                    .id-back-text-rules .id-back-rule-line + .id-back-rule-line {
+                        margin-top: 0.8mm;
                     }
                 `}</style>
 
