@@ -519,7 +519,6 @@ const BusDetails = () => {
                                                 <td className="p-4">{p.stage_name}</td>
                                                 <td className="p-4 text-gray-500">{p.user_type === 'employee' ? 'Free (₹0)' : `₹${p.fare}`}</td>
                                                 <td className="p-4 text-right">
-                                                    {!p.is_expired && (
                                                     <button
                                                         type="button"
                                                         disabled={fetchingPass}
@@ -530,7 +529,6 @@ const BusDetails = () => {
                                                         <FileText size={16} />
                                                         Print
                                                     </button>
-                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
