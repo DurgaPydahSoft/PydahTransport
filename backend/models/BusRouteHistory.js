@@ -26,6 +26,10 @@ const busRouteHistorySchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    previousRouteExitDate: {
+        type: Date,
+        default: null,
+    },
     assignedAt: {
         type: Date,
         default: Date.now,

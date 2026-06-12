@@ -15,6 +15,13 @@ const busSchema = new mongoose.Schema({
         enum: ['Standard', 'Mini-bus', 'Van'],
         default: 'Standard'
     },
+    vehicleModel: {
+        type: String,
+        trim: true,
+    },
+    registrationDate: {
+        type: Date,
+    },
     amenities: [{
         type: String
     }],

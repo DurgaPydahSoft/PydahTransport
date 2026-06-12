@@ -247,8 +247,9 @@ const BusDetails = () => {
     const { bus, route, passengers, seatsFilled, seatsAvailable, capacity, occupancyPercent } = data;
 
     const activePassengers = (passengers || []).filter((p) => !p.is_expired);
-    const studentCount = activePassengers.filter(p => !p.user_type || p.user_type === 'student').length;
-    const employeeCount = activePassengers.filter(p => p.user_type === 'employee').length;
+    const yearPassengers = passengers || [];
+    const studentCount = yearPassengers.filter((p) => !p.user_type || p.user_type === 'student').length;
+    const employeeCount = yearPassengers.filter((p) => p.user_type === 'employee').length;
 
     return (
         <Layout>
@@ -289,9 +290,13 @@ const BusDetails = () => {
                                 {bus.status}
                             </span>
                         </div>
-                        <p className="text-gray-500 font-medium flex items-center gap-2">
+                        <p className="text-gray-500 font-medium flex items-center gap-2 flex-wrap">
                             <Tag size={16} className="text-blue-500" />
-                            {bus.type} • Vehicle Detail View
+                            {bus.type}
+                            {bus.vehicleModel && <> • {bus.vehicleModel}</>}
+                            {bus.registrationDate && (
+                                <> • Reg. {new Date(bus.registrationDate).toLocaleDateString()}</>
+                            )}
                         </p>
                     </div>
 
@@ -616,22 +621,17 @@ const BusDetails = () => {
                                         <table className="w-full text-left border-collapse">
                                             <thead>
                                                 <tr className="bg-gray-50 border-b border-gray-100 text-[11px] uppercase text-gray-400 font-black tracking-widest">
-                                                    <th className="px-6 py-4">Assigned At</th>
                                                     <th className="px-6 py-4">Action</th>
                                                     <th className="px-6 py-4">Previous Route</th>
+                                                    <th className="px-6 py-4">Exit Date</th>
                                                     <th className="px-6 py-4">New Route</th>
+                                                    <th className="px-6 py-4">Assigned At</th>
                                                     <th className="px-6 py-4">Changed By</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-50">
                                                 {routeHistory.map(record => (
                                                     <tr key={record._id} className="hover:bg-gray-50 transition-colors">
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-bold">
-                                                            <div className="flex items-center gap-2">
-                                                                <Calendar size={14} className="text-gray-400" />
-                                                                {new Date(record.assignedAt).toLocaleString()}
-                                                            </div>
-                                                        </td>
                                                         <td className="px-6 py-4">
                                                             <span className="px-2 py-1 rounded text-[10px] font-bold uppercase bg-blue-50 text-blue-700">
                                                                 {record.action}
@@ -640,8 +640,21 @@ const BusDetails = () => {
                                                         <td className="px-6 py-4 text-sm text-gray-600">
                                                             {record.previousRouteName || record.previousRouteId || '—'}
                                                         </td>
+                                                        <td className="px-6 py-4 text-sm text-gray-700">
+                                                            {record.previousRouteExitDate
+                                                                ? new Date(record.previousRouteExitDate).toLocaleDateString()
+                                                                : '—'}
+                                                        </td>
                                                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">
                                                             {record.routeName || record.routeId || '—'}
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-bold">
+                                                            <div className="flex items-center gap-2">
+                                                                <Calendar size={14} className="text-gray-400" />
+                                                                {record.assignedAt
+                                                                    ? new Date(record.assignedAt).toLocaleDateString()
+                                                                    : '—'}
+                                                            </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm text-gray-500">
                                                             {record.changedBy || '—'}

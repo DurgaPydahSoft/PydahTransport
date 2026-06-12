@@ -15,12 +15,13 @@ import {
     UserCheck,
     Armchair,
     LayoutList,
-    LayoutGrid
+    LayoutGrid,
+    X
 } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-const TABS = { buses: 'buses', mapping: 'mapping', staff: 'staff' };
+const TABS = { buses: 'buses', mapping: 'mapping', staffMapping: 'staffMapping', staff: 'staff' };
 const VIEW_MODES = { table: 'table', card: 'card' };
 
 const todayDateInput = () => new Date().toISOString().slice(0, 10);
@@ -47,22 +48,20 @@ const BusManagement = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [assigningBusId, setAssigningBusId] = useState(null);
+    const [assigningStaffBusId, setAssigningStaffBusId] = useState(null);
     const [drivers, setDrivers] = useState([]);
     const [cleaners, setCleaners] = useState([]);
     const [driversLoading, setDriversLoading] = useState(false);
     const [cleanersLoading, setCleanersLoading] = useState(false);
+    const [staffDrafts, setStaffDrafts] = useState({});
+    const [routeDrafts, setRouteDrafts] = useState({});
     const [formData, setFormData] = useState({
         busNumber: '',
         capacity: '',
         type: 'Standard',
-        driverName: '',
-        attendantName: '',
+        vehicleModel: '',
+        registrationDate: todayDateInput(),
         status: 'Active'
-    });
-    const [originalBus, setOriginalBus] = useState(null);
-    const [staffChangeDates, setStaffChangeDates] = useState({
-        driver: { exitDate: '', entryDate: '' },
-        cleaner: { exitDate: '', entryDate: '' },
     });
 
     const fetchBuses = async () => {
@@ -153,30 +152,95 @@ const BusManagement = () => {
         loadCleaners();
     }, []);
 
-    const driverChanged = Boolean(
-        editingId &&
-        originalBus &&
-        normalizeStaffName(formData.driverName) !== normalizeStaffName(originalBus.driverName)
-    );
-    const cleanerChanged = Boolean(
-        editingId &&
-        originalBus &&
-        normalizeStaffName(formData.attendantName) !== normalizeStaffName(originalBus.attendantName)
-    );
-    const driverOptions = withCurrentStaffOption(drivers, formData.driverName);
-    const cleanerOptions = withCurrentStaffOption(cleaners, formData.attendantName);
+    const buildStaffDraft = (bus) => ({
+        driverName: bus.driverName || '',
+        attendantName: bus.attendantName || '',
+        driverExitDate: todayDateInput(),
+        driverEntryDate: todayDateInput(),
+        cleanerExitDate: todayDateInput(),
+        cleanerEntryDate: todayDateInput(),
+    });
 
-    const handleAssignRoute = async (busId, routeId) => {
-        setAssigningBusId(busId);
+    const buildRouteDraft = (bus) => ({
+        routeId: bus.assignedRouteId || '',
+        exitDate: todayDateInput(),
+        entryDate: todayDateInput(),
+    });
+
+    const getRouteLabel = (routeId) => {
+        if (!routeId) return '—';
+        const route = routes.find((r) => r.routeId === routeId);
+        return route ? `${route.routeName} (${route.routeId})` : routeId;
+    };
+
+    useEffect(() => {
+        if (!buses.length) return;
+        setStaffDrafts(Object.fromEntries(buses.map((bus) => [bus._id, buildStaffDraft(bus)])));
+        setRouteDrafts(Object.fromEntries(buses.map((bus) => [bus._id, buildRouteDraft(bus)])));
+    }, [buses]);
+
+    const handleRouteDraftChange = (busId, routeId) => {
+        setRouteDrafts((prev) => ({
+            ...prev,
+            [busId]: {
+                ...(prev[busId] || { exitDate: todayDateInput(), entryDate: todayDateInput() }),
+                routeId,
+            },
+        }));
+    };
+
+    const handleRouteDraftDateChange = (busId, field, value) => {
+        setRouteDrafts((prev) => ({
+            ...prev,
+            [busId]: { ...prev[busId], [field]: value },
+        }));
+    };
+
+    const hasRouteDraftChanges = (bus) => {
+        const draft = routeDrafts[bus._id] || buildRouteDraft(bus);
+        return (draft.routeId || '') !== (bus.assignedRouteId || '');
+    };
+
+    const handleRouteSaveClick = async (bus) => {
+        const draft = routeDrafts[bus._id] || buildRouteDraft(bus);
+        const previousRouteId = bus.assignedRouteId || '';
+        const newRouteId = draft.routeId || '';
+
+        if (previousRouteId === newRouteId) {
+            alert('No route changes to save for this bus.');
+            return;
+        }
+        if (previousRouteId && !draft.exitDate) {
+            alert('Please set the exit date for the previous route.');
+            return;
+        }
+        if (newRouteId && !draft.entryDate) {
+            alert('Please set the assignment date for the new route.');
+            return;
+        }
+
+        setAssigningBusId(bus._id);
         try {
-            const response = await apiFetch(`${API}/buses/${busId}`, {
+            const response = await apiFetch(`${API}/buses/${bus._id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ assignedRouteId: routeId || null }),
+                body: JSON.stringify({
+                    routeChange: {
+                        newRouteId: newRouteId || null,
+                        exitDate: previousRouteId ? draft.exitDate : null,
+                        entryDate: newRouteId ? draft.entryDate : null,
+                    },
+                }),
             });
-            if (response.ok) fetchBuses();
+            if (response.ok) {
+                fetchBuses();
+            } else {
+                const data = await response.json().catch(() => ({}));
+                alert(data.message || 'Failed to update route assignment');
+            }
         } catch (e) {
             console.error(e);
+            alert('Error updating route assignment');
         } finally {
             setAssigningBusId(null);
         }
@@ -190,23 +254,23 @@ const BusManagement = () => {
         }));
     };
 
-    const handleEdit = async (bus, e) => {
-        e.stopPropagation();
-        const [driverList, cleanerList] = await Promise.all([loadDrivers(), loadCleaners()]);
-        const matchedDriver = matchStaffByName(driverList, bus.driverName);
-        const matchedCleaner = matchStaffByName(cleanerList, bus.attendantName);
+    const formatDateForInput = (value) => {
+        if (!value) return todayDateInput();
+        try {
+            return new Date(value).toISOString().slice(0, 10);
+        } catch {
+            return todayDateInput();
+        }
+    };
 
-        setOriginalBus(bus);
-        setStaffChangeDates({
-            driver: { exitDate: todayDateInput(), entryDate: todayDateInput() },
-            cleaner: { exitDate: todayDateInput(), entryDate: todayDateInput() },
-        });
+    const handleEdit = (bus, e) => {
+        e.stopPropagation();
         setFormData({
             busNumber: bus.busNumber,
             capacity: bus.capacity,
             type: bus.type,
-            driverName: matchedDriver?.employee_name || bus.driverName || '',
-            attendantName: matchedCleaner?.employee_name || bus.attendantName || '',
+            vehicleModel: bus.vehicleModel || '',
+            registrationDate: formatDateForInput(bus.registrationDate),
             status: bus.status
         });
         setEditingId(bus._id);
@@ -236,51 +300,125 @@ const BusManagement = () => {
     const handleCloseModal = () => {
         setIsModalOpen(false);
         setEditingId(null);
-        setOriginalBus(null);
-        setStaffChangeDates({
-            driver: { exitDate: '', entryDate: '' },
-            cleaner: { exitDate: '', entryDate: '' },
-        });
         setFormData({
             busNumber: '',
             capacity: '',
             type: 'Standard',
-            driverName: '',
-            attendantName: '',
+            vehicleModel: '',
+            registrationDate: todayDateInput(),
             status: 'Active'
         });
     };
 
-    const handleStaffDateChange = (role, field, value) => {
-        setStaffChangeDates((prev) => ({
+    const handleStaffDraftChange = (busId, field, value) => {
+        setStaffDrafts((prev) => ({
             ...prev,
-            [role]: { ...prev[role], [field]: value },
+            [busId]: {
+                ...(prev[busId] || buildStaffDraft({ driverName: '', attendantName: '' })),
+                [field]: value,
+            },
         }));
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleStaffDraftDateChange = (busId, field, value) => {
+        setStaffDrafts((prev) => ({
+            ...prev,
+            [busId]: { ...prev[busId], [field]: value },
+        }));
+    };
+
+    const handleDismissStaffChanges = (bus) => {
+        setStaffDrafts((prev) => ({
+            ...prev,
+            [bus._id]: buildStaffDraft(bus),
+        }));
+    };
+
+    const hasStaffDraftChanges = (bus) => {
+        const draft = staffDrafts[bus._id] || {
+            driverName: bus.driverName || '',
+            attendantName: bus.attendantName || '',
+        };
+        return (
+            normalizeStaffName(draft.driverName) !== normalizeStaffName(bus.driverName) ||
+            normalizeStaffName(draft.attendantName) !== normalizeStaffName(bus.attendantName)
+        );
+    };
+
+    const handleStaffSaveClick = async (bus) => {
+        const draft = staffDrafts[bus._id] || buildStaffDraft(bus);
+        const driverChanged = normalizeStaffName(draft.driverName) !== normalizeStaffName(bus.driverName);
+        const cleanerChanged = normalizeStaffName(draft.attendantName) !== normalizeStaffName(bus.attendantName);
+
+        if (!driverChanged && !cleanerChanged) {
+            alert('No changes to save for this bus.');
+            return;
+        }
 
         if (driverChanged) {
-            if (originalBus?.driverName && !staffChangeDates.driver.exitDate) {
+            if (bus.driverName && !draft.driverExitDate) {
                 alert('Please set the exit date for the previous driver.');
                 return;
             }
-            if (formData.driverName && !staffChangeDates.driver.entryDate) {
+            if (draft.driverName && !draft.driverEntryDate) {
                 alert('Please set the entry date for the new driver.');
                 return;
             }
         }
         if (cleanerChanged) {
-            if (originalBus?.attendantName && !staffChangeDates.cleaner.exitDate) {
+            if (bus.attendantName && !draft.cleanerExitDate) {
                 alert('Please set the exit date for the previous cleaner.');
                 return;
             }
-            if (formData.attendantName && !staffChangeDates.cleaner.entryDate) {
+            if (draft.attendantName && !draft.cleanerEntryDate) {
                 alert('Please set the entry date for the new cleaner.');
                 return;
             }
         }
+
+        const staffChanges = {};
+        if (driverChanged) {
+            staffChanges.driver = {
+                previousName: bus.driverName || null,
+                newName: draft.driverName || null,
+                exitDate: bus.driverName ? draft.driverExitDate : null,
+                entryDate: draft.driverName ? draft.driverEntryDate : null,
+                empNo: matchStaffByName(drivers, draft.driverName)?.emp_no || null,
+            };
+        }
+        if (cleanerChanged) {
+            staffChanges.cleaner = {
+                previousName: bus.attendantName || null,
+                newName: draft.attendantName || null,
+                exitDate: bus.attendantName ? draft.cleanerExitDate : null,
+                entryDate: draft.attendantName ? draft.cleanerEntryDate : null,
+                empNo: matchStaffByName(cleaners, draft.attendantName)?.emp_no || null,
+            };
+        }
+
+        setAssigningStaffBusId(bus._id);
+        try {
+            const response = await apiFetch(`${API}/buses/${bus._id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ staffChanges }),
+            });
+            if (response.ok) {
+                fetchBuses();
+            } else {
+                const data = await response.json().catch(() => ({}));
+                alert(data.message || 'Failed to update staff assignment');
+            }
+        } catch (error) {
+            console.error('Error assigning staff:', error);
+            alert('Error updating staff assignment');
+        } finally {
+            setAssigningStaffBusId(null);
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
 
         try {
             const url = editingId
@@ -290,27 +428,6 @@ const BusManagement = () => {
             const method = editingId ? 'PUT' : 'POST';
 
             const payload = { ...formData };
-            if (editingId && (driverChanged || cleanerChanged)) {
-                payload.staffChanges = {};
-                if (driverChanged) {
-                    payload.staffChanges.driver = {
-                        previousName: originalBus?.driverName || null,
-                        newName: formData.driverName || null,
-                        exitDate: originalBus?.driverName ? staffChangeDates.driver.exitDate : null,
-                        entryDate: staffChangeDates.driver.entryDate,
-                        empNo: matchStaffByName(drivers, formData.driverName)?.emp_no || null,
-                    };
-                }
-                if (cleanerChanged) {
-                    payload.staffChanges.cleaner = {
-                        previousName: originalBus?.attendantName || null,
-                        newName: formData.attendantName || null,
-                        exitDate: originalBus?.attendantName ? staffChangeDates.cleaner.exitDate : null,
-                        entryDate: staffChangeDates.cleaner.entryDate,
-                        empNo: matchStaffByName(cleaners, formData.attendantName)?.emp_no || null,
-                    };
-                }
-            }
 
             const response = await apiFetch(url, {
                 method: method,
@@ -337,7 +454,7 @@ const BusManagement = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                 <div>
                     <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Bus Management</h2>
-                    <p className="text-slate-600 mt-1">Manage buses and assign them to routes.</p>
+                    <p className="text-slate-600 mt-1">Manage buses, routes, and staff assignments.</p>
                 </div>
                 {activeTab === TABS.buses && (
                     <div className="flex items-center gap-3">
@@ -387,11 +504,19 @@ const BusManagement = () => {
                 </button>
                 <button
                     type="button"
+                    onClick={() => setActiveTab(TABS.staffMapping)}
+                    className={`px-4 py-2.5 rounded-t-xl text-sm font-medium transition-colors flex items-center ${activeTab === TABS.staffMapping ? 'bg-white border border-b-0 border-gray-200 text-blue-700 shadow-sm -mb-px' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}
+                >
+                    <UserCheck size={18} className="mr-2" />
+                    Bus–Staff assignment
+                </button>
+                <button
+                    type="button"
                     onClick={() => setActiveTab(TABS.staff)}
                     className={`px-4 py-2.5 rounded-t-xl text-sm font-medium transition-colors flex items-center ${activeTab === TABS.staff ? 'bg-white border border-b-0 border-gray-200 text-blue-700 shadow-sm -mb-px' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'}`}
                 >
                     <Users size={18} className="mr-2" />
-                    Drivers & Cleaners
+                    Staff directory
                 </button>
             </div>
 
@@ -399,7 +524,7 @@ const BusManagement = () => {
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
                     <div className="p-4 border-b border-slate-100 bg-slate-50/50">
                         <h3 className="font-semibold text-slate-800">Assign each bus to a route</h3>
-                        <p className="text-sm text-slate-500 mt-0.5">Changes apply immediately. Use Fleet & Passengers to auto-fill capacity.</p>
+                        <p className="text-sm text-slate-500 mt-0.5">Select a route per bus, set exit and assignment dates when changing, then click Save.</p>
                     </div>
                     {loading ? (
                         <div className="py-12">
@@ -415,34 +540,97 @@ const BusManagement = () => {
                                         <th className="p-4 w-56">Bus Details</th>
                                         <th className="p-4">Capacity</th>
                                         <th className="p-4">Assigned Route</th>
+                                        <th className="p-4 w-32">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {buses.map((bus) => (
-                                        <tr key={bus._id} className="hover:bg-blue-50/30 transition-colors">
-                                            <td className="p-4">
-                                                <div>
-                                                    <p className="font-bold text-slate-800">{bus.busNumber}</p>
-                                                    <p className="text-xs text-slate-500">{bus.type}</p>
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-slate-600 font-medium">{bus.capacity}</td>
-                                            <td className="p-4">
-                                                <select
-                                                    value={bus.assignedRouteId || ''}
-                                                    onChange={(e) => handleAssignRoute(bus._id, e.target.value || null)}
-                                                    disabled={assigningBusId === bus._id}
-                                                    className="w-full max-w-xs text-sm rounded-lg border border-slate-300 py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white font-medium text-slate-700 transition-all font-sans"
-                                                >
-                                                    <option value="">— Unassigned —</option>
-                                                    {routes.map((r) => (
-                                                        <option key={r._id} value={r.routeId}>{r.routeName} ({r.routeId})</option>
-                                                    ))}
-                                                </select>
-                                                {assigningBusId === bus._id && <span className="text-xs text-blue-500 ml-2 animate-pulse">Saving...</span>}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {buses.map((bus) => {
+                                        const draft = routeDrafts[bus._id] || buildRouteDraft(bus);
+                                        const routeChanged = hasRouteDraftChanges(bus);
+                                        const previousRouteId = bus.assignedRouteId || '';
+
+                                        return (
+                                            <React.Fragment key={bus._id}>
+                                                <tr className="hover:bg-blue-50/30 transition-colors">
+                                                    <td className="p-4">
+                                                        <div>
+                                                            <p className="font-bold text-slate-800">{bus.busNumber}</p>
+                                                            <p className="text-xs text-slate-500">{bus.type}</p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4 text-slate-600 font-medium">{bus.capacity}</td>
+                                                    <td className="p-4">
+                                                        <select
+                                                            value={draft.routeId}
+                                                            onChange={(e) => handleRouteDraftChange(bus._id, e.target.value)}
+                                                            disabled={assigningBusId === bus._id}
+                                                            className="w-full max-w-xs text-sm rounded-lg border border-slate-300 py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white font-medium text-slate-700 transition-all font-sans"
+                                                        >
+                                                            <option value="">— Unassigned —</option>
+                                                            {routes.map((r) => (
+                                                                <option key={r._id} value={r.routeId}>{r.routeName} ({r.routeId})</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRouteSaveClick(bus)}
+                                                            disabled={assigningBusId === bus._id || !routeChanged}
+                                                            className="px-4 py-2 rounded-lg text-sm font-bold bg-blue-900 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all whitespace-nowrap"
+                                                        >
+                                                            {assigningBusId === bus._id ? 'Saving…' : 'Save'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                {routeChanged && (
+                                                    <tr className="bg-slate-50/80">
+                                                        <td colSpan={4} className="px-4 pb-4 pt-0">
+                                                            <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                                                                <p className="text-xs font-black text-blue-800 uppercase tracking-wide">Route change details</p>
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                    {previousRouteId && (
+                                                                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                                                                            <p className="text-xs font-semibold text-amber-800">Previous route</p>
+                                                                            <p className="text-sm font-bold text-slate-900">{getRouteLabel(previousRouteId)}</p>
+                                                                            <div>
+                                                                                <label className="block text-xs font-semibold text-slate-600 mb-1">Exit date</label>
+                                                                                <input
+                                                                                    type="date"
+                                                                                    value={draft.exitDate}
+                                                                                    onChange={(e) => handleRouteDraftDateChange(bus._id, 'exitDate', e.target.value)}
+                                                                                    className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-sm"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                    {draft.routeId ? (
+                                                                        <div className="rounded-lg border border-blue-200 bg-white p-3 space-y-2">
+                                                                            <p className="text-xs font-semibold text-blue-800">New route</p>
+                                                                            <p className="text-sm font-bold text-slate-900">{getRouteLabel(draft.routeId)}</p>
+                                                                            <div>
+                                                                                <label className="block text-xs font-semibold text-slate-600 mb-1">Assignment date</label>
+                                                                                <input
+                                                                                    type="date"
+                                                                                    value={draft.entryDate}
+                                                                                    onChange={(e) => handleRouteDraftDateChange(bus._id, 'entryDate', e.target.value)}
+                                                                                    className="w-full px-3 py-2 rounded-lg border border-blue-200 bg-white text-sm"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                                                            <p className="text-sm text-slate-600">Route will be unassigned from this bus.</p>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -451,11 +639,191 @@ const BusManagement = () => {
                 </div>
             )}
 
+            {activeTab === TABS.staffMapping && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+                    <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+                        <h3 className="font-semibold text-slate-800">Assign driver and cleaner to each bus</h3>
+                        <p className="text-sm text-slate-500 mt-0.5">Select driver and cleaner per bus. Set previous exit date and new entry date when changing, then click Save.</p>
+                    </div>
+                    {(driversLoading || cleanersLoading) ? (
+                        <div className="py-12">
+                            <Loader text="Loading staff data..." />
+                        </div>
+                    ) : buses.length === 0 ? (
+                        <div className="p-12 text-center text-slate-500">No buses available. Add buses in the Buses tab first.</div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold tracking-wider">
+                                        <th className="p-4 w-56">Bus Details</th>
+                                        <th className="p-4">Assigned Driver</th>
+                                        <th className="p-4">Assigned Cleaner</th>
+                                        <th className="p-4 w-32">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {buses.map((bus) => {
+                                        const draft = staffDrafts[bus._id] || buildStaffDraft(bus);
+                                        const hasChanges = hasStaffDraftChanges(bus);
+                                        const driverChanged = normalizeStaffName(draft.driverName) !== normalizeStaffName(bus.driverName);
+                                        const cleanerChanged = normalizeStaffName(draft.attendantName) !== normalizeStaffName(bus.attendantName);
+
+                                        return (
+                                            <React.Fragment key={bus._id}>
+                                                <tr className="hover:bg-blue-50/30 transition-colors">
+                                                    <td className="p-4">
+                                                        <p className="font-bold text-slate-800">{bus.busNumber}</p>
+                                                        <p className="text-xs text-slate-500">{bus.vehicleModel || bus.type}</p>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <select
+                                                            value={draft.driverName}
+                                                            onChange={(e) => handleStaffDraftChange(bus._id, 'driverName', e.target.value)}
+                                                            disabled={assigningStaffBusId === bus._id}
+                                                            className="w-full max-w-xs text-sm rounded-lg border border-slate-300 py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white font-medium text-slate-700"
+                                                        >
+                                                            <option value="">— Unassigned —</option>
+                                                            {withCurrentStaffOption(drivers, draft.driverName).map((d) => (
+                                                                <option key={d._id} value={d.employee_name}>{d.employee_name} ({d.emp_no})</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <select
+                                                            value={draft.attendantName}
+                                                            onChange={(e) => handleStaffDraftChange(bus._id, 'attendantName', e.target.value)}
+                                                            disabled={assigningStaffBusId === bus._id}
+                                                            className="w-full max-w-xs text-sm rounded-lg border border-slate-300 py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white font-medium text-slate-700"
+                                                        >
+                                                            <option value="">— Unassigned —</option>
+                                                            {withCurrentStaffOption(cleaners, draft.attendantName).map((c) => (
+                                                                <option key={c._id} value={c.employee_name}>{c.employee_name} ({c.emp_no})</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleStaffSaveClick(bus)}
+                                                            disabled={assigningStaffBusId === bus._id || !hasChanges}
+                                                            className="px-4 py-2 rounded-lg text-sm font-bold bg-blue-900 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all whitespace-nowrap"
+                                                        >
+                                                            {assigningStaffBusId === bus._id ? 'Saving…' : 'Save'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                {hasChanges && (
+                                                    <tr className="bg-slate-50/80">
+                                                        <td colSpan={4} className="px-4 pb-4 pt-0">
+                                                            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+                                                                <div className="flex items-center justify-between gap-3">
+                                                                    <p className="text-xs font-black text-slate-600 uppercase tracking-wide">Staff change details</p>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleDismissStaffChanges(bus)}
+                                                                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                                                                        title="Close and discard changes"
+                                                                        aria-label="Close staff change details"
+                                                                    >
+                                                                        <X size={16} />
+                                                                    </button>
+                                                                </div>
+                                                                {driverChanged && (
+                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                        {bus.driverName && (
+                                                                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                                                                                <p className="text-xs font-semibold text-amber-800">Previous driver</p>
+                                                                                <p className="text-sm font-bold text-slate-900">{bus.driverName}</p>
+                                                                                <div>
+                                                                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Exit date</label>
+                                                                                    <input
+                                                                                        type="date"
+                                                                                        value={draft.driverExitDate}
+                                                                                        onChange={(e) => handleStaffDraftDateChange(bus._id, 'driverExitDate', e.target.value)}
+                                                                                        className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-sm"
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                        {draft.driverName ? (
+                                                                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+                                                                                <p className="text-xs font-semibold text-blue-800">New driver</p>
+                                                                                <p className="text-sm font-bold text-slate-900">{draft.driverName}</p>
+                                                                                <div>
+                                                                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Entry date</label>
+                                                                                    <input
+                                                                                        type="date"
+                                                                                        value={draft.driverEntryDate}
+                                                                                        onChange={(e) => handleStaffDraftDateChange(bus._id, 'driverEntryDate', e.target.value)}
+                                                                                        className="w-full px-3 py-2 rounded-lg border border-blue-200 bg-white text-sm"
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                                                                <p className="text-sm text-slate-600">Driver will be unassigned.</p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                                {cleanerChanged && (
+                                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                        {bus.attendantName && (
+                                                                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                                                                                <p className="text-xs font-semibold text-amber-800">Previous cleaner</p>
+                                                                                <p className="text-sm font-bold text-slate-900">{bus.attendantName}</p>
+                                                                                <div>
+                                                                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Exit date</label>
+                                                                                    <input
+                                                                                        type="date"
+                                                                                        value={draft.cleanerExitDate}
+                                                                                        onChange={(e) => handleStaffDraftDateChange(bus._id, 'cleanerExitDate', e.target.value)}
+                                                                                        className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-sm"
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                        {draft.attendantName ? (
+                                                                            <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-2">
+                                                                                <p className="text-xs font-semibold text-purple-800">New cleaner</p>
+                                                                                <p className="text-sm font-bold text-slate-900">{draft.attendantName}</p>
+                                                                                <div>
+                                                                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Entry date</label>
+                                                                                    <input
+                                                                                        type="date"
+                                                                                        value={draft.cleanerEntryDate}
+                                                                                        onChange={(e) => handleStaffDraftDateChange(bus._id, 'cleanerEntryDate', e.target.value)}
+                                                                                        className="w-full px-3 py-2 rounded-lg border border-purple-200 bg-white text-sm"
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                                                                <p className="text-sm text-slate-600">Cleaner will be unassigned.</p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {activeTab === TABS.staff && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8">
                     <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div>
-                            <h3 className="font-semibold text-slate-800">Drivers & Cleaners List</h3>
+                            <h3 className="font-semibold text-slate-800">Staff directory</h3>
                             <p className="text-sm text-slate-500 mt-0.5">List of all staff members from HRMS.</p>
                         </div>
                         <div className="bg-white p-1 rounded-lg border border-slate-200 flex items-center shadow-sm">
@@ -548,6 +916,8 @@ const BusManagement = () => {
                                     <thead>
                                         <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold tracking-wider">
                                             <th className="px-4 py-3 w-56">Bus Details</th>
+                                            <th className="px-4 py-3">Model</th>
+                                            <th className="px-4 py-3">Reg. Date</th>
                                             <th className="px-4 py-3">Capacity</th>
                                             <th className="px-4 py-3">Driver</th>
                                             <th className="px-4 py-3">Attendant</th>
@@ -568,6 +938,14 @@ const BusManagement = () => {
                                                         <p className="font-bold text-slate-800 text-sm">{bus.busNumber}</p>
                                                         <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{bus.type}</p>
                                                     </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-slate-600">
+                                                    {bus.vehicleModel || <span className="text-slate-400 italic text-xs">--</span>}
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">
+                                                    {bus.registrationDate
+                                                        ? new Date(bus.registrationDate).toLocaleDateString()
+                                                        : <span className="text-slate-400 italic text-xs">--</span>}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-slate-600 font-medium">
                                                     <div className="flex items-center">
@@ -721,110 +1099,12 @@ const BusManagement = () => {
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Driver</label>
-                        <select
-                            name="driverName"
-                            value={formData.driverName}
-                            onChange={handleChange}
-                            className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
-                        >
-                            <option value="">— Select Driver —</option>
-                            {driverOptions.map(d => (
-                                <option key={d._id} value={d.employee_name}>{d.employee_name} ({d.emp_no})</option>
-                            ))}
-                        </select>
-                        {driverChanged && (
-                            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
-                                <p className="text-xs font-black text-amber-800 uppercase tracking-wide">Driver change details</p>
-                                {originalBus?.driverName && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                            <p className="text-xs font-semibold text-slate-600 mb-1">Previous driver</p>
-                                            <p className="text-sm font-bold text-slate-900">{originalBus.driverName}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-600 mb-1">Exit date</label>
-                                            <input
-                                                type="date"
-                                                required
-                                                value={staffChangeDates.driver.exitDate}
-                                                onChange={(e) => handleStaffDateChange('driver', 'exitDate', e.target.value)}
-                                                className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-sm"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-600 mb-1">New driver</p>
-                                        <p className="text-sm font-bold text-slate-900">{formData.driverName || '—'}</p>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Entry date</label>
-                                        <input
-                                            type="date"
-                                            required
-                                            value={staffChangeDates.driver.entryDate}
-                                            onChange={(e) => handleStaffDateChange('driver', 'entryDate', e.target.value)}
-                                            className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-sm"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Vehicle Model</label>
+                        <input type="text" name="vehicleModel" value={formData.vehicleModel} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" placeholder="e.g. Ashok Leyland Viking" />
                     </div>
                     <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Cleaner (Attendant)</label>
-                        <select
-                            name="attendantName"
-                            value={formData.attendantName}
-                            onChange={handleChange}
-                            className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
-                        >
-                            <option value="">— Select Cleaner —</option>
-                            {cleanerOptions.map(c => (
-                                <option key={c._id} value={c.employee_name}>{c.employee_name} ({c.emp_no})</option>
-                            ))}
-                        </select>
-                        {cleanerChanged && (
-                            <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50 p-4 space-y-3">
-                                <p className="text-xs font-black text-purple-800 uppercase tracking-wide">Cleaner change details</p>
-                                {originalBus?.attendantName && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                            <p className="text-xs font-semibold text-slate-600 mb-1">Previous cleaner</p>
-                                            <p className="text-sm font-bold text-slate-900">{originalBus.attendantName}</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-semibold text-slate-600 mb-1">Exit date</label>
-                                            <input
-                                                type="date"
-                                                required
-                                                value={staffChangeDates.cleaner.exitDate}
-                                                onChange={(e) => handleStaffDateChange('cleaner', 'exitDate', e.target.value)}
-                                                className="w-full px-3 py-2 rounded-lg border border-purple-200 bg-white text-sm"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-600 mb-1">New cleaner</p>
-                                        <p className="text-sm font-bold text-slate-900">{formData.attendantName || '—'}</p>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-600 mb-1">Entry date</label>
-                                        <input
-                                            type="date"
-                                            required
-                                            value={staffChangeDates.cleaner.entryDate}
-                                            onChange={(e) => handleStaffDateChange('cleaner', 'entryDate', e.target.value)}
-                                            className="w-full px-3 py-2 rounded-lg border border-purple-200 bg-white text-sm"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date of Registration</label>
+                        <input type="date" name="registrationDate" required value={formData.registrationDate} onChange={handleChange} className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all" />
                     </div>
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1.5">Status</label>

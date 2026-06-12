@@ -11,7 +11,7 @@ const LEGACY_CHANGED_BY = 'Existing assignment';
 const getChangedByName = (req) =>
     req.user?.employee_name || req.user?.name || req.user?.username || 'Admin';
 
-const getLegacyAssignedDate = (bus) => bus.createdAt || bus.updatedAt || new Date();
+const getLegacyAssignedDate = (bus) => bus.registrationDate || bus.createdAt || bus.updatedAt || new Date();
 
 /** Import route/driver/cleaner that were set before history tracking existed. */
 const backfillLegacyBusHistory = async (bus) => {
@@ -67,7 +67,7 @@ const resolveRouteName = async (routeId) => {
     return route?.routeName || routeId;
 };
 
-const recordRouteHistory = async (bus, previousRouteId, newRouteId, changedBy) => {
+const recordRouteHistory = async (bus, previousRouteId, newRouteId, changedBy, dates = {}) => {
     if (previousRouteId === newRouteId) return;
 
     const [previousRouteName, routeName] = await Promise.all([
@@ -86,7 +86,8 @@ const recordRouteHistory = async (bus, previousRouteId, newRouteId, changedBy) =
         routeName: routeName || null,
         previousRouteId: previousRouteId || null,
         previousRouteName: previousRouteName || null,
-        assignedAt: new Date(),
+        previousRouteExitDate: dates.exitDate ? new Date(dates.exitDate) : null,
+        assignedAt: dates.entryDate ? new Date(dates.entryDate) : new Date(),
         action,
         changedBy,
     });
@@ -191,7 +192,9 @@ const getBusDetails = async (req, res) => {
         const passengers = [...activePassengers, ...mongoPassengers, ...expiredPassengers];
         passengers.sort((a, b) => a.stage_name.localeCompare(b.stage_name) || a.student_name.localeCompare(b.student_name));
         const capacity = bus.capacity || 0;
-        const seatsFilled = activePassengers.length + mongoPassengers.length;
+        // Occupancy for the selected academic year: all approved assignments on this bus
+        // (pass expiry is for validity display only — same rule as fleet overview).
+        const seatsFilled = mysqlPassengers.length + mongoPassengers.length;
         const seatsAvailable = Math.max(0, capacity - seatsFilled);
         const occupancyPercent = capacity > 0 ? Math.min(100, Math.round((seatsFilled / capacity) * 100)) : 0;
 
@@ -201,6 +204,8 @@ const getBusDetails = async (req, res) => {
                 busNumber: bus.busNumber,
                 capacity: bus.capacity,
                 type: bus.type,
+                vehicleModel: bus.vehicleModel,
+                registrationDate: bus.registrationDate,
                 driverName: bus.driverName,
                 attendantName: bus.attendantName,
                 status: bus.status,
@@ -416,31 +421,60 @@ const updateBus = async (req, res) => {
         bus.amenities = req.body.amenities || bus.amenities;
         bus.status = req.body.status || bus.status;
 
+        if (req.body.vehicleModel !== undefined) {
+            bus.vehicleModel = req.body.vehicleModel;
+        }
+        if (req.body.registrationDate !== undefined) {
+            bus.registrationDate = req.body.registrationDate ? new Date(req.body.registrationDate) : null;
+        }
+
+        const applyStaffChange = async (role, change, assignField) => {
+            if (!change) return;
+            const newName = (change.newName || '').trim();
+            const previousName = (change.previousName || '').trim();
+
+            if (newName) {
+                bus[assignField] = newName;
+                await recordStaffHistory(bus, role, change, changedBy);
+                return;
+            }
+
+            bus[assignField] = '';
+            if (previousName && change.exitDate) {
+                await BusStaffHistory.updateMany(
+                    { busNumber: bus.busNumber, role, isCurrent: true },
+                    { exitDate: new Date(change.exitDate), isCurrent: false }
+                );
+            }
+        };
+
         if (staffChanges?.driver) {
-            bus.driverName = staffChanges.driver.newName || bus.driverName;
+            await applyStaffChange('driver', staffChanges.driver, 'driverName');
         } else if (req.body.driverName !== undefined) {
             bus.driverName = req.body.driverName;
         }
 
         if (staffChanges?.cleaner) {
-            bus.attendantName = staffChanges.cleaner.newName || bus.attendantName;
+            await applyStaffChange('cleaner', staffChanges.cleaner, 'attendantName');
         } else if (req.body.attendantName !== undefined) {
             bus.attendantName = req.body.attendantName;
         }
 
-        if (req.body.assignedRouteId !== undefined) {
+        if (req.body.routeChange) {
+            const newRouteId = req.body.routeChange.newRouteId || null;
+            if (newRouteId !== previousRouteId) {
+                bus.assignedRouteId = newRouteId;
+                await recordRouteHistory(bus, previousRouteId, newRouteId, changedBy, {
+                    exitDate: req.body.routeChange.exitDate,
+                    entryDate: req.body.routeChange.entryDate,
+                });
+            }
+        } else if (req.body.assignedRouteId !== undefined) {
             const newRouteId = req.body.assignedRouteId || null;
             if (newRouteId !== previousRouteId) {
                 bus.assignedRouteId = newRouteId;
                 await recordRouteHistory(bus, previousRouteId, newRouteId, changedBy);
             }
-        }
-
-        if (staffChanges?.driver) {
-            await recordStaffHistory(bus, 'driver', staffChanges.driver, changedBy);
-        }
-        if (staffChanges?.cleaner) {
-            await recordStaffHistory(bus, 'cleaner', staffChanges.cleaner, changedBy);
         }
 
         const updatedBus = await bus.save();
