@@ -2,12 +2,23 @@ import React, { forwardRef } from 'react';
 import { normalizeStudentPhoto } from '../utils/studentPhoto';
 
 const LOGO_SRC = '/PYDAH_LOGO_PHOTO.jpg';
+const BUS_HELPLINE = '8500059344';
+const PHOTO_COL_WIDTH = '48mm';
 
 const getAcademicYearLabel = (passenger) => {
     if (passenger?.academic_year) return passenger.academic_year;
     const now = new Date();
     const year = now.getFullYear();
     return now.getMonth() >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+};
+
+const getShortAcademicYearLabel = (passenger) => {
+    const ay = getAcademicYearLabel(passenger);
+    const parts = ay.split('-').map((p) => p.trim());
+    if (parts.length === 2 && parts[0].length >= 2 && parts[1].length >= 2) {
+        return `${parts[0].slice(-2)}-${parts[1].slice(-2)}`;
+    }
+    return ay;
 };
 
 const formatDate = (d) => {
@@ -19,128 +30,134 @@ const formatDate = (d) => {
     }
 };
 
-const AdmitCardCopy = ({ copyLabel, passenger }) => {
+const getTempPassValidTill = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 4);
+    return formatDate(d);
+};
+
+const TempBusPassCopy = ({ copyLabel, passenger }) => {
     const {
         student_name,
         employee_name,
         admission_number,
         emp_no,
         pin_no,
+        application_number,
         user_type,
         course,
         branch,
         department,
         year_of_study,
+        route_id,
         route_name,
         stage_name,
-        bus_id,
-        fare,
+        stage_timing,
         student_photo,
-        student_mobile,
-        parent_mobile1,
-        student_address,
-        father_name,
-        expiry_date,
-        effective_expiry_date,
     } = passenger || {};
 
     const name = student_name || employee_name || '—';
-    const rollNo = admission_number || emp_no || '—';
     const isEmployee = (user_type || '').toLowerCase() === 'employee';
-    const academicYear = getAcademicYearLabel(passenger);
-    const expiry = effective_expiry_date || expiry_date;
+    const transportApplicationNumber = application_number || '—';
+    const idNumber = pin_no || admission_number || emp_no || '—';
     const displayCourse = course || department || '—';
+    const courseDetail = branch ? `${displayCourse} (${branch})` : displayCourse;
+    const yearDetail = isEmployee ? 'Employee' : (year_of_study != null ? `Year ${year_of_study}` : '—');
+    const routeLabel = [route_id, route_name].filter(Boolean).join(' - ') || '—';
+    const stageTiming = stage_timing || '—';
+    const shortAy = getShortAcademicYearLabel(passenger);
+    const validTill = getTempPassValidTill();
     const photoSrc = normalizeStudentPhoto(student_photo);
+    const photoRowSpan = 6;
 
     return (
         <div className="admit-card-copy">
             <div className="copy-label">{copyLabel}</div>
-            <div className="card-border">
-                <div className="card-header">
+            <div className="pass-border">
+                <div className="pass-header">
                     <img src={LOGO_SRC} alt="Pydah Group" className="inst-logo" />
                     <div className="header-center">
                         <div className="inst-name">Pydah Group Of Institutions</div>
+                        <div className="helpline">Bus Help Line No: {BUS_HELPLINE}</div>
                     </div>
                     <div className="header-right">
-                        <div className="card-title">TRANSPORT ADMIT CARD</div>
-                        <div className="card-ay">{academicYear} AY</div>
-                    </div>
-                </div>
-                <div className="divider" />
-
-                <div className="card-body">
-                    <div className="student-block">
-                        <div className="col-details">
-                            <div className="section-title">STUDENT DETAILS</div>
-                            <div className="details-list">
-                                <div className="detail-row"><span className="lbl">Name</span><span className="val">{name}</span></div>
-                                <div className="detail-row"><span className="lbl">{isEmployee ? 'Emp No' : 'Roll No'}</span><span className="val">{rollNo}</span></div>
-                                {!isEmployee && (
-                                    <div className="detail-row"><span className="lbl">PIN No</span><span className="val">{pin_no || '—'}</span></div>
-                                )}
-                                <div className="detail-row"><span className="lbl">Course</span><span className="val">{displayCourse}{branch ? ` (${branch})` : ''}</span></div>
-                                <div className="detail-row"><span className="lbl">Year</span><span className="val">{isEmployee ? '—' : (year_of_study ?? '—')}</span></div>
-                                <div className="detail-row"><span className="lbl">Mobile</span><span className="val">{student_mobile || '—'}</span></div>
-                                <div className="detail-row"><span className="lbl">Parent No</span><span className="val">{parent_mobile1 || '—'}</span></div>
-                                <div className="detail-row"><span className="lbl">Father</span><span className="val">{father_name || '—'}</span></div>
-                                <div className="detail-row"><span className="lbl">Address</span><span className="val address-val">{student_address || '—'}</span></div>
-                                <div className="detail-row"><span className="lbl">Valid Until</span><span className="val">{isEmployee ? 'N/A' : formatDate(expiry)}</span></div>
-                            </div>
+                        <div className="pass-type-banner">
+                            <span>Temp Bus Pass for</span>
+                            <span className="pass-ay">{shortAy} AY</span>
                         </div>
-
-                        <div className="col-photo">
-                            <div className="section-title">STUDENT PHOTO</div>
-                            <div className="photo-frame">
-                                {photoSrc ? (
-                                    <img src={photoSrc} alt={name} className="student-photo" />
-                                ) : (
-                                    <div className="photo-placeholder">PHOTO</div>
-                                )}
-                            </div>
+                        <div className="validity-banner">
+                            <span>Valid for Four days only</span>
+                            <span className="valid-till">Till {validTill}</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="fee-section">
-                    <div className="section-title fee-title">TRANSPORT DETAILS</div>
-                    <div className="transport-table-wrap">
-                        <table className="transport-table">
-                            <tbody>
-                                <tr>
-                                    <td className="lbl">Route</td>
-                                    <td className="val">{route_name || '—'}</td>
-                                </tr>
-                                <tr>
-                                    <td className="lbl">Stage</td>
-                                    <td className="val">{stage_name || '—'}</td>
-                                </tr>
-                                <tr>
-                                    <td className="lbl">Bus</td>
-                                    <td className="val">{bus_id || 'Not assigned'}</td>
-                                </tr>
-                                <tr>
-                                    <td className="lbl">Fare</td>
-                                    <td className="val fare-val">{isEmployee ? 'Free (Rs : 0)' : `Rs : ${fare ?? 0}`}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div className="notes-section">
-                    <div className="section-title">IMPORTANT NOTES:</div>
-                    <ol className="notes-list">
-                        <li>Present this card at the bus pickup point for verification.</li>
-                        <li>Transport pass is valid only for the assigned route, stage and bus above.</li>
-                        <li>Report any route or bus changes to the Transport Office immediately.</li>
-                    </ol>
+                <div className="pass-content">
+                    <table className="info-grid">
+                        <tbody>
+                            <tr>
+                                <td className="cell-label" rowSpan={2}>Student Name &amp; Details</td>
+                                <td className="cell-value cell-highlight" colSpan={2}>{name}</td>
+                                <td className="cell-photo" rowSpan={photoRowSpan}>
+                                    <div className="photo-cell-inner">
+                                        <div className="photo-frame">
+                                            {photoSrc ? (
+                                                <img src={photoSrc} alt={name} className="student-photo" />
+                                            ) : (
+                                                <div className="photo-placeholder">PHOTO</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td className="cell-value">{courseDetail}</td>
+                                <td className="cell-value">{yearDetail}</td>
+                            </tr>
+                            <tr>
+                                <td className="cell-label">Application NO. &amp; ID NO.</td>
+                                <td className="cell-value cell-accent">{transportApplicationNumber}</td>
+                                <td className="cell-value cell-accent">{idNumber}</td>
+                            </tr>
+                            <tr>
+                                <td className="cell-label">Route No &amp; Name</td>
+                                <td className="cell-value" colSpan={2}>{routeLabel}</td>
+                            </tr>
+                            <tr>
+                                <td className="cell-label">Stage Name &amp; Timings</td>
+                                <td className="cell-value">{stage_name || '—'}</td>
+                                <td className="cell-value">{stageTiming}</td>
+                            </tr>
+                            <tr>
+                                <td colSpan={3} className="terms-bar-cell">
+                                    <div className="terms-bar">
+                                        <span>1st Term: On or before First Semester starting Date.</span>
+                                        <span>2nd Term: On or before Second Semester starting Date.</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colSpan={3} className="notes-section">
+                                    <strong className="note-heading">NOTE:</strong>
+                                    <span className="note-text">
+                                        1. Be at the bus stage 15 min before allotted time.
+                                        2. Temp pass valid 4 days only — collect permanent pass from office.
+                                        3. Late fee Rs.500/- per term if not paid by due date.
+                                    </span>
+                                </td>
+                                <td className="signature-box">
+                                    <span className="signature-label">Authorised Signature</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     );
 };
 
-const TransportAdmitCard = forwardRef(({ passenger, busMeta }, ref) => {
+const TransportAdmitCard = forwardRef(({ passenger }, ref) => {
     if (!passenger) return null;
 
     return (
@@ -181,14 +198,32 @@ const TransportAdmitCard = forwardRef(({ passenger, busMeta }, ref) => {
                             page-break-after: avoid !important;
                             page-break-inside: avoid !important;
                         }
-                        .card-border {
-                            border: 1px solid #000 !important;
-                        }
-                        .transport-table td,
-                        .photo-frame,
-                        .divider,
-                        .copy-separator {
+                        .pass-border,
+                        .info-grid td,
+                        .signature-box {
                             border-color: #000 !important;
+                        }
+                        .pass-type-banner,
+                        .terms-bar {
+                            background: #4a4a4a !important;
+                            color: #fff !important;
+                        }
+                        .validity-banner {
+                            background: #d9d9d9 !important;
+                        }
+                        .cell-label {
+                            background: #f0f4ff !important;
+                        }
+                        .copy-label,
+                        .copy-label,
+                        .inst-name,
+                        .helpline,
+                        .cell-highlight,
+                        .cell-accent,
+                        .valid-till,
+                        .note-heading {
+                            -webkit-print-color-adjust: exact;
+                            print-color-adjust: exact;
                         }
                     }
                     .transport-admit-print-root {
@@ -201,51 +236,61 @@ const TransportAdmitCard = forwardRef(({ passenger, busMeta }, ref) => {
                         margin: 0 auto;
                         display: grid;
                         grid-template-rows: 1fr auto 1fr;
-                        align-items: stretch;
-                        gap: 0;
+                        align-items: center;
                         box-sizing: border-box;
                         page-break-inside: avoid;
+                    }
+                    .copy-section {
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        width: 100%;
+                        min-height: 0;
                     }
                     .admit-card-copy {
                         display: flex;
                         flex-direction: column;
-                        min-height: 0;
+                        flex: 0 0 auto;
+                        width: 100%;
                         page-break-inside: avoid;
                     }
                     .copy-separator {
                         border: none;
-                        border-top: 1px dashed #999;
-                        margin: 2mm 0;
+                        border-top: 1px dashed #666;
+                        margin: 0;
                         flex-shrink: 0;
+                        width: 100%;
                         height: 0;
                     }
                     .copy-label {
-                        font-size: 6.5pt;
+                        font-size: 12pt;
                         font-weight: 700;
-                        margin-bottom: 0.8mm;
+                        margin-bottom: 1mm;
                         text-transform: uppercase;
                         flex-shrink: 0;
+                        color: #1e40af;
+                        text-align: center;
+                        letter-spacing: 0.3mm;
                     }
-                    .card-border {
-                        border: 1px solid #000;
-                        padding: 2.5mm;
+                    .pass-border {
+                        border: 2px solid #000;
+                        padding: 2mm;
                         box-sizing: border-box;
                         display: flex;
                         flex-direction: column;
-                        gap: 1.5mm;
-                        flex: 1;
-                        min-height: 0;
-                        overflow: visible;
+                        gap: 0;
                     }
-                    .card-header {
+                    .pass-header {
                         display: flex;
                         align-items: center;
-                        gap: 3mm;
+                        gap: 2mm;
                         flex-shrink: 0;
+                        margin-bottom: 2.5mm;
                     }
                     .inst-logo {
-                        width: 22mm;
-                        height: 14mm;
+                        width: 30mm;
+                        height: 22mm;
                         object-fit: contain;
                         object-position: left center;
                         flex-shrink: 0;
@@ -255,159 +300,210 @@ const TransportAdmitCard = forwardRef(({ passenger, busMeta }, ref) => {
                         text-align: center;
                     }
                     .inst-name {
-                        font-size: 11pt;
+                        font-size: 15pt;
                         font-weight: 700;
+                        line-height: 1.1;
+                        color: #1e3a8a;
+                    }
+                    .helpline {
+                        font-size: 10pt;
+                        font-weight: 700;
+                        margin-top: 0.6mm;
+                        color: #1e40af;
                     }
                     .header-right {
-                        text-align: right;
-                        min-width: 36mm;
                         flex-shrink: 0;
+                        min-width: 48mm;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 0;
                     }
-                    .card-title {
+                    .pass-type-banner {
+                        background: #4a4a4a;
+                        color: #fff;
+                        font-size: 8.5pt;
+                        font-weight: 700;
+                        padding: 1mm 1.5mm;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 1.5mm;
+                    }
+                    .pass-ay {
+                        white-space: nowrap;
+                        color: #fde68a;
+                    }
+                    .validity-banner {
+                        background: #d9d9d9;
+                        color: #000;
                         font-size: 8pt;
-                        font-weight: 700;
-                    }
-                    .card-ay {
-                        font-size: 7pt;
                         font-weight: 600;
-                    }
-                    .divider {
-                        border: none;
-                        border-top: 1px solid #000;
-                        margin: 0;
-                        flex-shrink: 0;
-                        height: 0;
-                    }
-                    .card-body {
+                        padding: 1mm 1.5mm;
                         display: flex;
-                        justify-content: center;
-                        width: 100%;
-                        flex-shrink: 0;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 1.5mm;
                     }
-                    .student-block {
-                        display: flex;
-                        align-items: flex-start;
-                        justify-content: center;
-                        gap: 5mm;
-                        max-width: 100%;
-                    }
-                    .col-details {
-                        width: 78mm;
-                        flex-shrink: 0;
-                    }
-                    .col-photo {
-                        width: 30mm;
-                        flex-shrink: 0;
-                    }
-                    .section-title {
-                        font-size: 6.5pt;
+                    .valid-till {
                         font-weight: 700;
-                        text-decoration: underline;
-                        margin-bottom: 1mm;
-                        text-transform: uppercase;
+                        white-space: nowrap;
+                        color: #b91c1c;
                     }
-                    .details-list {
+                    .pass-content {
+                        display: block;
+                        margin-top: 0.5mm;
+                    }
+                    .info-grid {
                         width: 100%;
-                        font-size: 6.5pt;
+                        border-collapse: collapse;
+                        border-spacing: 0;
+                        table-layout: fixed;
+                        font-size: 10.5pt;
                     }
-                    .detail-row {
-                        display: flex;
-                        gap: 2mm;
-                        padding: 0.4mm 0;
-                        align-items: flex-start;
+                    .info-grid td {
+                        border: 1px solid #000;
+                        padding: 2mm 2.5mm;
+                        vertical-align: middle;
+                        line-height: 1.35;
                     }
-                    .detail-row .lbl {
+                    .cell-label {
                         font-weight: 700;
-                        width: 28%;
-                        flex-shrink: 0;
+                        width: 30%;
+                        background: #f0f4ff;
+                        color: #1e3a8a;
                     }
-                    .detail-row .val {
+                    .cell-value {
                         font-weight: 500;
-                        flex: 1;
+                        color: #1f2937;
                     }
-                    .address-val {
-                        font-size: 5.5pt;
-                        line-height: 1.2;
+                    .cell-highlight {
+                        font-weight: 700;
+                        color: #1e40af;
+                        font-size: 11pt;
+                    }
+                    .cell-accent {
+                        font-weight: 700;
+                        color: #0f766e;
+                        font-size: 10.5pt;
+                    }
+                    .cell-photo {
+                        width: ${PHOTO_COL_WIDTH};
+                        vertical-align: middle;
+                        text-align: center;
+                        padding: 1.5mm 2.5mm;
+                        box-sizing: border-box;
+                        background: #fff;
+                    }
+                    .photo-cell-inner {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        width: 100%;
+                        height: 100%;
+                        min-height: 44mm;
                     }
                     .photo-frame {
-                        border: 1px solid #000;
-                        width: 30mm;
-                        height: 38mm;
+                        border: none;
+                        width: 100%;
+                        max-width: 38mm;
+                        margin: 0 auto;
+                        aspect-ratio: 3 / 4;
+                        padding: 0;
                         display: flex;
                         align-items: center;
                         justify-content: center;
                         overflow: hidden;
                         box-sizing: border-box;
+                        background: transparent;
                     }
                     .student-photo {
                         width: 100%;
                         height: 100%;
+                        max-width: 100%;
+                        max-height: 100%;
                         object-fit: cover;
                         object-position: center top;
+                        display: block;
+                        margin: 0 auto;
+                        box-sizing: border-box;
                     }
                     .photo-placeholder {
-                        font-size: 7pt;
-                        color: #666;
+                        font-size: 11pt;
+                        color: #64748b;
                         font-weight: 700;
+                        width: 100%;
+                        height: 100%;
+                        min-height: 36mm;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-sizing: border-box;
+                        background: #f8fafc;
                     }
-                    .fee-section {
-                        flex-shrink: 0;
-                        text-align: center;
+                    .terms-bar-cell {
+                        padding: 0;
+                        vertical-align: middle;
                     }
-                    .fee-title {
-                        margin-bottom: 1mm;
-                        text-align: center;
-                    }
-                    .transport-table-wrap {
+                    .terms-bar {
+                        background: #808080;
+                        color: #fff;
+                        font-size: 9pt;
+                        font-weight: 600;
+                        padding: 1.5mm 2.5mm;
                         display: flex;
                         justify-content: center;
-                        width: 100%;
+                        align-items: center;
+                        flex-wrap: wrap;
+                        gap: 1mm 5mm;
+                        text-align: center;
+                        border: none;
                     }
-                    .transport-table {
-                        width: 65%;
-                        max-width: 115mm;
-                        border-collapse: collapse;
-                        font-size: 6.5pt;
-                        margin: 0 auto;
+                    .terms-bar span {
+                        text-align: center;
                     }
-                    .transport-table td {
-                        border: 1px solid #000;
-                        padding: 0.8mm 1.5mm;
-                        vertical-align: top;
+                    .signature-box {
+                        width: ${PHOTO_COL_WIDTH};
+                        vertical-align: bottom;
+                        text-align: center;
+                        padding: 1.2mm;
+                        padding-bottom: 1.5mm;
+                        box-sizing: border-box;
+                        background: #fff;
+                        min-height: 15mm;
                     }
-                    .transport-table .lbl {
-                        font-weight: 700;
-                        width: 32%;
-                        background: #f5f5f5;
-                    }
-                    .transport-table .val {
-                        font-weight: 500;
-                    }
-                    .transport-table .fare-val {
-                        font-weight: 700;
+                    .signature-label {
+                        font-size: 8pt;
+                        font-weight: 600;
+                        color: #374151;
                     }
                     .notes-section {
-                        flex-shrink: 0;
-                        margin-top: 0;
-                        text-align: center;
+                        font-size: 11.5pt;
+                        line-height: 1.4;
+                        color: #374151;
+                        vertical-align: top;
                     }
-                    .notes-section .section-title {
-                        text-align: center;
+                    .notes-section .note-heading,
+                    .notes-section .note-text {
+                        display: inline;
                     }
-                    .notes-list {
-                        font-size: 5.5pt;
-                        margin: 0 auto;
-                        padding-left: 0;
-                        line-height: 1.35;
-                        display: inline-block;
-                        text-align: left;
-                        list-style-position: inside;
+                    .note-heading {
+                        font-weight: 700;
+                        color: #b91c1c;
+                        font-size: 11.5pt;
+                        margin-right: 1mm;
+                    }
+                    .note-text {
+                        font-size: 11.5pt;
                     }
                 `}</style>
 
-                <AdmitCardCopy copyLabel="STUDENT COPY" passenger={passenger} />
+                <div className="copy-section">
+                    <TempBusPassCopy copyLabel="STUDENT COPY" passenger={passenger} />
+                </div>
                 <hr className="copy-separator" aria-hidden="true" />
-                <AdmitCardCopy copyLabel="TRANSPORT OFFICE COPY" passenger={passenger} />
+                <div className="copy-section">
+                    <TempBusPassCopy copyLabel="TRANSPORT OFFICE COPY" passenger={passenger} />
+                </div>
             </div>
         </div>
     );

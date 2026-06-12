@@ -4,6 +4,7 @@ const Bus = require('../models/Bus');
 const mongoose = require('mongoose');
 const EmployeeTransportRequest = require('../models/EmployeeTransportRequest');
 const { validateStudentAcademicContext } = require('../utils/studentAcademicValidation');
+const { assignTransportApplicationNumber, peekNextTransportApplicationNumber } = require('../utils/transportApplicationNumber');
 
 const isMongoId = (id) => mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
 
@@ -233,6 +234,32 @@ async function getBusesWithSeatsForRoute(routeId) {
     });
 }
 
+async function getApplicationNumberForApprovalPreview(mysqlPool, requestRow) {
+    const academicYear = requestRow.academic_year || process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+
+    if (requestRow.application_number) {
+        return {
+            academic_year: academicYear,
+            application_number: requestRow.application_number,
+            application_serial: requestRow.application_serial != null ? Number(requestRow.application_serial) : null,
+        };
+    }
+
+    try {
+        const next = await peekNextTransportApplicationNumber(mysqlPool, academicYear);
+        return {
+            academic_year: academicYear,
+            next_application_number: next.application_number,
+            next_application_serial: next.application_serial,
+        };
+    } catch (error) {
+        if (error.code === 'ER_NO_SUCH_TABLE') {
+            return { academic_year: academicYear };
+        }
+        throw error;
+    }
+}
+
 // @desc    Get expiry for a transport request (last sem of student's year – for approve popup)
 // @route   GET /api/transport-requests/:id/semester-options
 // @access  Private/Admin
@@ -249,6 +276,14 @@ const getSemesterOptions = async (req, res) => {
             if (routeId) {
                 busesOnRoute = await getBusesWithSeatsForRoute(routeId);
             }
+
+            let applicationPreview = { academic_year: reqRow.academic_year || getDefaultAcademicYear() };
+            if (mysqlPool) {
+                applicationPreview = await getApplicationNumberForApprovalPreview(mysqlPool, reqRow);
+            } else if (reqRow.application_number) {
+                applicationPreview.application_number = reqRow.application_number;
+            }
+
             return res.json({
                 requestId: String(reqRow._id),
                 studentName: reqRow.employee_name,
@@ -258,8 +293,9 @@ const getSemesterOptions = async (req, res) => {
                 route_id: routeId,
                 route_name: reqRow.route_name,
                 busesOnRoute,
-                expiry: null, // Employees do not have semesters
-                user_type: 'employee'
+                expiry: null,
+                user_type: 'employee',
+                ...applicationPreview,
             });
         }
 
@@ -287,6 +323,9 @@ const getSemesterOptions = async (req, res) => {
         if (routeId) {
             busesOnRoute = await getBusesWithSeatsForRoute(routeId);
         }
+
+        const applicationPreview = await getApplicationNumberForApprovalPreview(mysqlPool, transportRequest);
+
         return res.json({
             requestId: Number(requestId),
             studentName: transportRequest.student_name,
@@ -296,6 +335,7 @@ const getSemesterOptions = async (req, res) => {
             route_id: routeId,
             route_name: routeName,
             busesOnRoute,
+            ...applicationPreview,
             expiry: lastSem
                 ? {
                     expiry_date: lastSem.end_date,
@@ -427,6 +467,9 @@ const getTransportRequests = async (req, res) => {
                 request_date: r.request_date || r.created_at,
                 raised_by: r.raised_by,
                 raised_by_id: r.raised_by_id,
+                academic_year: r.academic_year || null,
+                application_number: r.application_number || null,
+                application_serial: r.application_serial || null,
                 user_type: 'employee',
                 course: 'Employee'
             }));
@@ -560,17 +603,34 @@ const approveTransportRequest = async (req, res) => {
             if (!reqRow) return res.status(404).json({ message: 'Transport request not found' });
             if (reqRow.status === 'approved') return res.status(400).json({ message: 'Request is already approved' });
             if (reqRow.status === 'rejected') return res.status(400).json({ message: 'Request was rejected and cannot be approved' });
-            
+
+            const resolvedAcademicYear = academicYear || reqRow.academic_year || process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+            if (!mysqlPool) {
+                return res.status(500).json({ message: 'MySQL connection not established' });
+            }
+
+            const application = await assignTransportApplicationNumber(
+                mysqlPool,
+                resolvedAcademicYear,
+                reqRow.application_number,
+                reqRow.application_serial
+            );
+
             reqRow.status = 'approved';
+            reqRow.academic_year = resolvedAcademicYear;
+            reqRow.application_number = application.application_number;
+            reqRow.application_serial = application.application_serial;
             if (req.body.bus_id) {
                 reqRow.bus_id = req.body.bus_id;
             }
             await reqRow.save();
             return res.json({
-                message: 'Employee transport request approved. No fee created.',
+                message: `Employee transport request approved. Application No: ${application.application_number}.`,
                 requestId: String(reqRow._id),
+                application_number: application.application_number,
+                application_serial: application.application_serial,
                 amount: 0,
-                expiry_date: null
+                expiry_date: null,
             });
         }
 
@@ -681,19 +741,18 @@ const approveTransportRequest = async (req, res) => {
                     semester_number: lastSem.semester_number,
                 });
             }
-            let updateQuery = 'UPDATE transport_requests SET status = ?';
-            let updateParams = ['approved'];
-            if (req.body.bus_id) {
-                updateQuery += ', bus_id = ?';
-                updateParams.push(req.body.bus_id);
-            }
-            updateQuery += ' WHERE id = ?';
-            updateParams.push(requestId);
-            await mysqlPool.query(updateQuery, updateParams);
+            const application = await markTransportRequestApproved(mysqlPool, requestId, {
+                bus_id: req.body.bus_id,
+                academicYear: resolvedAcademicYear,
+                existingApplicationNumber: request.application_number,
+                existingApplicationSerial: request.application_serial,
+            });
 
             return res.json({
-                message: 'Request approved. Transport fee for this student/year already exists in Fee Management.',
+                message: `Request approved. Application No: ${application.application_number}. Transport fee for this student/year already exists in Fee Management.`,
                 requestId: Number(requestId),
+                application_number: application.application_number,
+                application_serial: application.application_serial,
                 expiry_date: lastSem?.end_date || null,
             });
         }
@@ -722,24 +781,33 @@ const approveTransportRequest = async (req, res) => {
                 semester_number: lastSem.semester_number,
             });
         }
-        let updateQuery = 'UPDATE transport_requests SET status = ?';
-        let updateParams = ['approved'];
-        if (req.body.bus_id) {
-            updateQuery += ', bus_id = ?';
-            updateParams.push(req.body.bus_id);
-        }
-        updateQuery += ' WHERE id = ?';
-        updateParams.push(requestId);
-        await mysqlPool.query(updateQuery, updateParams);
+        const application = await markTransportRequestApproved(mysqlPool, requestId, {
+            bus_id: req.body.bus_id,
+            academicYear: resolvedAcademicYear,
+            existingApplicationNumber: request.application_number,
+            existingApplicationSerial: request.application_serial,
+        });
 
         res.json({
-            message: 'Transport request approved and Transport Fee (TRN01) created in Fee Management.',
+            message: `Transport request approved. Application No: ${application.application_number}. Transport Fee (TRN01) created in Fee Management.`,
             requestId: Number(requestId),
             academicYear: resolvedAcademicYear,
+            application_number: application.application_number,
+            application_serial: application.application_serial,
             amount,
             expiry_date: lastSem?.end_date || null,
         });
     } catch (error) {
+        if (error.code === 'ER_NO_SUCH_TABLE' && String(error.message).includes('transport_application_counters')) {
+            return res.status(503).json({
+                message: 'Transport application counter table not found. Run backend/mysql-schema/add-transport-application-number.sql.',
+            });
+        }
+        if (error.code === 'ER_BAD_FIELD_ERROR' && String(error.message).includes('application_number')) {
+            return res.status(503).json({
+                message: 'Column application_number not found on transport_requests. Run backend/mysql-schema/add-transport-application-number.sql.',
+            });
+        }
         console.error('Error approving transport request:', error);
         res.status(500).json({ message: error.message || 'Failed to approve request' });
     }
@@ -790,6 +858,32 @@ const rejectTransportRequest = async (req, res) => {
         res.status(500).json({ message: error.message || 'Failed to reject request' });
     }
 };
+
+async function markTransportRequestApproved(mysqlPool, requestId, {
+    bus_id,
+    academicYear,
+    existingApplicationNumber = null,
+    existingApplicationSerial = null,
+}) {
+    const application = await assignTransportApplicationNumber(
+        mysqlPool,
+        academicYear,
+        existingApplicationNumber,
+        existingApplicationSerial
+    );
+
+    await mysqlPool.query(
+        `UPDATE transport_requests
+         SET status = 'approved',
+             bus_id = ?,
+             application_number = ?,
+             application_serial = ?
+         WHERE id = ?`,
+        [bus_id || null, application.application_number, application.application_serial, requestId]
+    );
+
+    return application;
+}
 
 async function updateTransportRequestSemester(mysqlPool, requestId, fields) {
     const {

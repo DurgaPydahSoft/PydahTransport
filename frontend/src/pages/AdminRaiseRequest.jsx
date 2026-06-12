@@ -48,16 +48,27 @@ const getDefaultAcademicYear = () => {
     return now.getMonth() >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
 };
 
-const buildFallbackAcademicYearOptions = () => {
-    const defaultYear = getDefaultAcademicYear();
-    const startYear = Number(defaultYear.split('-')[0]);
+const getAcademicYearWindow = (centerLabel = getDefaultAcademicYear(), pastCount = 3, futureCount = 3) => {
+    const startYear = Number(String(centerLabel).split('-')[0]);
+    if (Number.isNaN(startYear)) {
+        return [centerLabel];
+    }
     const options = [];
-    for (let offset = -3; offset <= 3; offset += 1) {
+    for (let offset = -pastCount; offset <= futureCount; offset += 1) {
         const start = startYear + offset;
         options.push(`${start}-${start + 1}`);
     }
     return options;
 };
+
+const filterAcademicYearOptions = (allLabels, centerLabel = getDefaultAcademicYear()) => {
+    const windowLabels = getAcademicYearWindow(centerLabel);
+    const labelSet = new Set(allLabels || []);
+    const fromDb = windowLabels.filter((label) => labelSet.has(label));
+    return fromDb.length > 0 ? fromDb : windowLabels;
+};
+
+const buildFallbackAcademicYearOptions = () => getAcademicYearWindow();
 
 const AdminRaiseRequest = () => {
     const [activeTab, setActiveTab] = useState('new'); // 'new' or 'change'
@@ -111,16 +122,13 @@ const AdminRaiseRequest = () => {
                 const response = await apiFetch(`${API_BASE}/students/academic-years`);
                 if (response.ok) {
                     const data = await response.json();
-                    const labels = (data || []).map((row) => row.year_label).filter(Boolean);
-                    if (labels.length > 0) {
-                        setAcademicYearOptions(labels);
-                        const defaultYear = getDefaultAcademicYear();
-                        if (labels.includes(defaultYear)) {
-                            setAcademicYear(defaultYear);
-                        } else {
-                            setAcademicYear(labels[0]);
-                        }
-                    }
+                    const allLabels = (data || []).map((row) => row.year_label).filter(Boolean);
+                    const defaultYear = getDefaultAcademicYear();
+                    const labels = allLabels.length > 0
+                        ? filterAcademicYearOptions(allLabels, defaultYear)
+                        : buildFallbackAcademicYearOptions();
+                    setAcademicYearOptions(labels);
+                    setAcademicYear(labels.includes(defaultYear) ? defaultYear : labels[0]);
                 }
             } catch (error) {
                 console.error('Error fetching academic years:', error);
@@ -333,7 +341,12 @@ const AdminRaiseRequest = () => {
             });
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
-                setMessage({ text: data.message || 'Request raised and approved successfully.', type: 'success' });
+                setMessage({
+                    text: data.application_number
+                        ? `Approved. Application No: ${data.application_number}`
+                        : (data.message || 'Request raised and approved successfully.'),
+                    type: 'success',
+                });
                 closeApproveModal();
                 setSearchQuery('');
                 setStudents([]);
@@ -868,7 +881,21 @@ const AdminRaiseRequest = () => {
                             {approveModal.data.user_type !== 'employee' && (
                                 <p><span className="font-medium text-gray-600">Course / Year:</span> {approveModal.data.course} – Year {approveModal.data.yearOfStudy}</p>
                             )}
+                            {approveModal.data.academic_year && (
+                                <p><span className="font-medium text-gray-600">Academic Year:</span> {approveModal.data.academic_year}</p>
+                            )}
                         </div>
+                        {(approveModal.data.application_number || approveModal.data.next_application_number) && (
+                            <div className="mb-4 p-4 rounded-xl border border-indigo-200 bg-indigo-50">
+                                <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Application Number</p>
+                                <p className="text-2xl font-black text-indigo-900 mt-1 tracking-wider">
+                                    {approveModal.data.application_number || approveModal.data.next_application_number}
+                                </p>
+                                {!approveModal.data.application_number && approveModal.data.next_application_number && (
+                                    <p className="text-xs text-indigo-600 mt-1">Will be assigned when you confirm approval</p>
+                                )}
+                            </div>
+                        )}
                         {approveModal.data.route_name && (
                             <div className="mb-4 p-4 rounded-xl border border-blue-100 bg-blue-50">
                                 <p className="text-sm font-semibold text-blue-900 mb-2">Route: {approveModal.data.route_name} {approveModal.data.route_id && <span className="text-blue-600">({approveModal.data.route_id})</span>}</p>

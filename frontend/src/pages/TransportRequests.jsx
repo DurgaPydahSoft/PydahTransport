@@ -396,7 +396,12 @@ const TransportRequests = () => {
             });
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
-                setMessage({ text: data.message || 'Request approved. Transport fee created in Fee Management.', type: 'success' });
+                setMessage({
+                    text: data.application_number
+                        ? `Approved. Application No: ${data.application_number}`
+                        : (data.message || 'Request approved. Transport fee created in Fee Management.'),
+                    type: 'success',
+                });
                 closeApproveModal();
                 fetchRequests();
             } else {
@@ -658,6 +663,7 @@ const TransportRequests = () => {
                                     <th className="p-4">Course</th>
                                     <th className="p-4 text-center">Year</th>
                                     <th className="p-4">Academic Year</th>
+                                    <th className="p-4">App No.</th>
                                     <th className="p-4">Route</th>
                                     <th className="p-4">Stage</th>
                                     <th className="p-4">Fare</th>
@@ -688,6 +694,7 @@ const TransportRequests = () => {
                                             )}
                                         </td>
                                         <td className="p-4 text-xs font-medium text-gray-600">{req.academic_year || '—'}</td>
+                                        <td className="p-4 text-xs font-bold text-indigo-700">{req.application_number || '—'}</td>
                                         <td className="p-4">{req.route_name}</td>
                                         <td className="p-4">{req.stage_name}</td>
                                         <td className="p-4 font-medium text-gray-900">{req.user_type === 'employee' ? 'Free (₹0)' : `₹${req.fare}`}</td>
@@ -796,6 +803,7 @@ const TransportRequests = () => {
                                                 </>
                                             )}
                                             <DetailItem icon={Calendar} label="Academic Year" value={req.academic_year || '—'} />
+                                            <DetailItem icon={FileText} label="Application No." value={req.application_number || '—'} />
                                             <DetailItem icon={Clock} label="Requested" value={formatDate(req.request_date)} />
                                         </div>
                                     </div>
@@ -844,7 +852,7 @@ const TransportRequests = () => {
                                                 </button>
                                             </>
                                         )}
-                                        {req.status === 'approved' && !isExpiredPass(req) && (
+                                        {req.status === 'approved' && (
                                             <button
                                                 type="button"
                                                 disabled={fetchingPass}
@@ -1086,7 +1094,21 @@ const TransportRequests = () => {
                             {approveModal.data.user_type !== 'employee' && (
                                 <p><span className="font-medium text-gray-600">Course / Year:</span> {approveModal.data.course} – Year {approveModal.data.yearOfStudy}</p>
                             )}
+                            {approveModal.data.academic_year && (
+                                <p><span className="font-medium text-gray-600">Academic Year:</span> {approveModal.data.academic_year}</p>
+                            )}
                         </div>
+                        {(approveModal.data.application_number || approveModal.data.next_application_number) && (
+                            <div className="mb-4 p-4 rounded-xl border border-indigo-200 bg-indigo-50">
+                                <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Application Number</p>
+                                <p className="text-2xl font-black text-indigo-900 mt-1 tracking-wider">
+                                    {approveModal.data.application_number || approveModal.data.next_application_number}
+                                </p>
+                                {!approveModal.data.application_number && approveModal.data.next_application_number && (
+                                    <p className="text-xs text-indigo-600 mt-1">Will be assigned when you confirm approval</p>
+                                )}
+                            </div>
+                        )}
                         {approveModal.data.route_name && (
                             <div className="mb-4 p-4 rounded-xl border border-blue-100 bg-blue-50">
                                 <p className="text-sm font-semibold text-blue-900 mb-2">Route: {approveModal.data.route_name} {approveModal.data.route_id && <span className="text-blue-600">({approveModal.data.route_id})</span>}</p>
