@@ -3,6 +3,7 @@ const { getFeePortalModels } = require('../models/fee-portal-models');
 const Bus = require('../models/Bus');
 const mongoose = require('mongoose');
 const EmployeeTransportRequest = require('../models/EmployeeTransportRequest');
+const { validateStudentAcademicContext } = require('../utils/studentAcademicValidation');
 
 const isMongoId = (id) => mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
 
@@ -903,17 +904,31 @@ const createTransportRequest = async (req, res) => {
         if (!mysqlPool) {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
-        // Fetch student's current year if not provided
-        let yearOfStudy = 1;
-        if (admission_number) {
-            const [studentRows] = await mysqlPool.query(
-                'SELECT current_year FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
-                [admission_number, admission_number]
-            );
-            if (studentRows[0] && studentRows[0].current_year != null) {
-                yearOfStudy = Number(studentRows[0].current_year);
-            }
+
+        const [studentRows] = await mysqlPool.query(
+            'SELECT batch, course, branch, current_year, current_semester FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
+            [admission_number, admission_number]
+        );
+        const studentRecord = studentRows[0];
+        if (!studentRecord) {
+            return res.status(404).json({ message: 'Student not found in the student database.' });
         }
+
+        const validation = await validateStudentAcademicContext(
+            mysqlPool,
+            studentRecord,
+            resolvedAcademicYear
+        );
+        if (!validation.valid) {
+            return res.status(400).json({
+                message: validation.message,
+                validation,
+            });
+        }
+
+        const yearOfStudy = studentRecord.current_year != null
+            ? Number(studentRecord.current_year)
+            : 1;
 
         const sql = `
             INSERT INTO transport_requests 

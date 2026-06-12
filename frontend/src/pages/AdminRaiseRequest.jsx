@@ -8,13 +8,47 @@ import { normalizeStudentPhoto } from '../utils/studentPhoto';
 
 const formatDate = (d) => (d ? new Date(d).toLocaleDateString() : '—');
 
+const getValidationDisplay = (validation) => {
+    if (!validation) return null;
+
+    if (validation.valid) {
+        return {
+            title: 'Ready to raise request',
+            className: 'bg-green-50 border-green-200 text-green-800',
+        };
+    }
+
+    switch (validation.reason) {
+        case 'course_completed':
+            return {
+                title: 'Course completed',
+                className: 'bg-slate-100 border-slate-200 text-slate-700',
+            };
+        case 'year_mismatch':
+            return {
+                title: 'Student year mismatch',
+                className: 'bg-amber-50 border-amber-200 text-amber-900',
+            };
+        case 'missing_semester_config':
+            return {
+                title: 'Semester setup pending',
+                className: 'bg-amber-50 border-amber-200 text-amber-900',
+            };
+        default:
+            return {
+                title: 'Cannot raise request',
+                className: 'bg-amber-50 border-amber-200 text-amber-900',
+            };
+    }
+};
+
 const getDefaultAcademicYear = () => {
     const now = new Date();
     const year = now.getFullYear();
     return now.getMonth() >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
 };
 
-const getAcademicYearOptions = () => {
+const buildFallbackAcademicYearOptions = () => {
     const defaultYear = getDefaultAcademicYear();
     const startYear = Number(defaultYear.split('-')[0]);
     const options = [];
@@ -40,7 +74,9 @@ const AdminRaiseRequest = () => {
     const [submitting, setSubmitting] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
     const [academicYear, setAcademicYear] = useState(getDefaultAcademicYear);
-    const academicYearOptions = getAcademicYearOptions();
+    const [academicYearOptions, setAcademicYearOptions] = useState(buildFallbackAcademicYearOptions);
+    const [academicValidation, setAcademicValidation] = useState(null);
+    const [validationLoading, setValidationLoading] = useState(false);
     const [busesOnRoute, setBusesOnRoute] = useState([]);
     const [busesLoading, setBusesLoading] = useState(false);
     const [approveModal, setApproveModal] = useState({ open: false, requestId: null, data: null, selectedBusId: '', loading: true, error: null });
@@ -67,6 +103,30 @@ const AdminRaiseRequest = () => {
             }
         };
         fetchRoutes();
+    }, []);
+
+    useEffect(() => {
+        const fetchAcademicYears = async () => {
+            try {
+                const response = await apiFetch(`${API_BASE}/students/academic-years`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const labels = (data || []).map((row) => row.year_label).filter(Boolean);
+                    if (labels.length > 0) {
+                        setAcademicYearOptions(labels);
+                        const defaultYear = getDefaultAcademicYear();
+                        if (labels.includes(defaultYear)) {
+                            setAcademicYear(defaultYear);
+                        } else {
+                            setAcademicYear(labels[0]);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching academic years:', error);
+            }
+        };
+        fetchAcademicYears();
     }, []);
 
     useEffect(() => {
@@ -105,6 +165,42 @@ const AdminRaiseRequest = () => {
         }
     };
 
+    const fetchAcademicValidation = async (student, year) => {
+        const admissionNumber = student?.admission_number || student?.admission_no;
+        const studentId = student?.student_id ?? student?.id;
+        if (!admissionNumber && !studentId) {
+            setAcademicValidation(null);
+            return;
+        }
+
+        const params = new URLSearchParams({ academic_year: year });
+        if (admissionNumber) {
+            params.set('admission_number', admissionNumber);
+        } else {
+            params.set('id', String(studentId));
+        }
+
+        setValidationLoading(true);
+        try {
+            const response = await apiFetch(`${API_BASE}/students/academic-validation?${params}`);
+            if (response.ok) {
+                const data = await response.json();
+                setAcademicValidation(data);
+                if (data.valid) {
+                    setFormError('');
+                }
+            } else {
+                const data = await response.json().catch(() => ({}));
+                setAcademicValidation({ valid: false, reason: 'missing_data', message: data.message || 'Could not validate academic year.' });
+            }
+        } catch (error) {
+            console.error('Error validating academic context:', error);
+            setAcademicValidation(null);
+        } finally {
+            setValidationLoading(false);
+        }
+    };
+
     const fetchStudentProfile = async (student) => {
         const admissionNumber = student.admission_number || student.admission_no;
         const studentId = student.student_id ?? student.id;
@@ -129,6 +225,7 @@ const AdminRaiseRequest = () => {
 
     const handleSelectStudent = async (student) => {
         setFormError('');
+        setAcademicValidation(null);
         setSelectedStudent(student);
         setSelectedRoute(null);
         setSelectedStage(null);
@@ -148,6 +245,14 @@ const AdminRaiseRequest = () => {
             setProfileLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (activeTab !== 'new' || userType !== 'student' || !selectedStudent) {
+            setAcademicValidation(null);
+            return;
+        }
+        fetchAcademicValidation(selectedStudent, academicYear);
+    }, [academicYear, activeTab, userType, selectedStudent?.admission_number, selectedStudent?.admission_no, selectedStudent?.id]);
 
     const handleSelectRoute = (e) => {
         setFormError('');
@@ -255,6 +360,11 @@ const AdminRaiseRequest = () => {
             return;
         }
 
+        if (activeTab === 'new' && userType === 'student' && academicValidation && !academicValidation.valid) {
+            setFormError(academicValidation.message || 'Student batch, year, and academic year do not match.');
+            return;
+        }
+
         setFormError('');
         setSubmitting(true);
         try {
@@ -315,7 +425,7 @@ const AdminRaiseRequest = () => {
             } else {
                 const data = await response.json();
                 const errorText = data.message || 'Failed to process request.';
-                if (!isChange && response.status === 409) {
+                if (!isChange && (response.status === 409 || response.status === 400)) {
                     setFormError(errorText);
                 } else {
                     setFormError('');
@@ -537,6 +647,12 @@ const AdminRaiseRequest = () => {
                                                     <span className="text-xs font-bold text-slate-700">{selectedStudent.pin_no}</span>
                                                 </div>
                                             )}
+                                            {userType === 'student' && selectedStudent.batch && (
+                                                <div className="px-2.5 py-1 bg-amber-50 rounded-lg shadow-sm border border-amber-100 inline-block text-center">
+                                                    <p className="text-[8px] font-black text-amber-500 uppercase leading-none">Batch</p>
+                                                    <span className="text-xs font-bold text-amber-800">{selectedStudent.batch}</span>
+                                                </div>
+                                            )}
                                             {activeTab === 'change' && (
                                                 <div className="px-2.5 py-1 bg-emerald-50 rounded-lg shadow-sm border border-emerald-100 inline-block min-w-[70px] text-center">
                                                     <p className="text-[8px] font-black text-emerald-400 uppercase leading-none">Current Fare</p>
@@ -555,7 +671,41 @@ const AdminRaiseRequest = () => {
                             </div>
 
                             <div className="space-y-4">
-                                {activeTab === 'new' && (
+                                {activeTab === 'new' && userType === 'student' && (
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
+                                            Academic Year
+                                        </label>
+                                        <select
+                                            value={academicYear}
+                                            onChange={(e) => { setAcademicYear(e.target.value); setFormError(''); }}
+                                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-700 appearance-none bg-white"
+                                            required
+                                        >
+                                            {academicYearOptions.map((year) => (
+                                                <option key={year} value={year}>{year}</option>
+                                            ))}
+                                        </select>
+                                        {validationLoading && (
+                                            <p className="mt-2 text-xs text-slate-500">Checking batch, year, and academic year…</p>
+                                        )}
+                                        {!validationLoading && academicValidation && (() => {
+                                            const display = getValidationDisplay(academicValidation);
+                                            return (
+                                                <div className={`mt-2 p-3 rounded-xl border text-sm leading-relaxed ${display.className}`}>
+                                                    <p className="font-bold mb-1">{display.title}</p>
+                                                    <p>{academicValidation.message}</p>
+                                                    {academicValidation.reason === 'year_mismatch' && academicValidation.total_years != null && (
+                                                        <p className="mt-1 text-xs opacity-90">
+                                                            {academicValidation.course} is a {academicValidation.total_years}-year course.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+                                {activeTab === 'new' && userType === 'employee' && (
                                     <div>
                                         <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
                                             Academic Year
@@ -662,7 +812,9 @@ const AdminRaiseRequest = () => {
 
                                 {formError && (
                                     <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-800 text-sm leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
-                                        <p className="font-bold text-red-900 text-xs uppercase tracking-wide mb-1">Cannot raise request</p>
+                                        <p className="font-bold text-red-900 text-xs uppercase tracking-wide mb-1">
+                                            {academicValidation?.reason === 'course_completed' ? 'Course completed' : 'Cannot raise request'}
+                                        </p>
                                         <p>{formError}</p>
                                     </div>
                                 )}
@@ -670,7 +822,12 @@ const AdminRaiseRequest = () => {
 
                             <button
                                 type="submit"
-                                disabled={submitting || !selectedStage}
+                                disabled={
+                                    submitting
+                                    || !selectedStage
+                                    || (activeTab === 'new' && userType === 'student' && academicValidation && !academicValidation.valid)
+                                    || (activeTab === 'new' && userType === 'student' && validationLoading)
+                                }
                                 className="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-black disabled:opacity-50 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2"
                             >
                                 {submitting ? (

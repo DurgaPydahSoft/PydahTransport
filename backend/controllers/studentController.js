@@ -1,6 +1,7 @@
 const { mysqlPool } = require('../config/db');
 const { getDefaultAcademicYear, resolveAcademicYear } = require('./transportRequestController');
 const { resolveStudentPhoto } = require('../utils/studentPhoto');
+const { validateStudentAcademicContext } = require('../utils/studentAcademicValidation');
 
 const COURSE_EXPIRY_MIGRATION_MSG =
     'Remove the old course+academic-year-only unique key so each year can have its own date. Run: ' +
@@ -58,7 +59,7 @@ const searchStudents = async (req, res) => {
 
         // Search by name, admission number, or PIN number
         const sql = `
-            SELECT id, admission_number, admission_no, pin_no, student_name, course, branch, current_year, current_semester, stud_type
+            SELECT id, admission_number, admission_no, pin_no, student_name, course, branch, batch, current_year, current_semester, stud_type
             FROM students
             WHERE student_name LIKE ? OR admission_number LIKE ? OR admission_no LIKE ? OR pin_no LIKE ?
             LIMIT 50
@@ -316,7 +317,7 @@ const getStudentProfile = async (req, res) => {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }
 
-        const profileFields = `id, admission_number, admission_no, pin_no, student_name, course, branch,
+        const profileFields = `id, admission_number, admission_no, pin_no, student_name, course, branch, batch,
                     current_year, current_semester, stud_type, student_photo, student_data,
                     student_mobile, parent_mobile1, parent_mobile2, father_name, student_address,
                     city_village, district, college, email`;
@@ -350,6 +351,76 @@ const getStudentProfile = async (req, res) => {
     }
 };
 
+// @desc    List configured academic years from MySQL
+// @route   GET /api/students/academic-years
+// @access  Private/Admin
+const getAcademicYears = async (req, res) => {
+    try {
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
+        const [rows] = await mysqlPool.query(
+            `SELECT id, year_label, start_date, end_date, is_active
+             FROM academic_years
+             WHERE is_active = 1
+             ORDER BY year_label DESC`
+        );
+        res.json(rows);
+    } catch (error) {
+        if (error.code === 'ER_NO_SUCH_TABLE') {
+            return res.status(503).json({ message: 'Table academic_years not found in student database.' });
+        }
+        console.error('Error fetching academic years:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Validate student batch, current year, and academic year alignment
+// @route   GET /api/students/academic-validation
+// @access  Private/Admin
+const getAcademicValidation = async (req, res) => {
+    const { id, admission_number, admission_no } = req.query;
+    const academicYear = resolveAcademicYear(req.query);
+
+    if (!id && !admission_number && !admission_no) {
+        return res.status(400).json({ message: 'id or admission_number is required' });
+    }
+
+    try {
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
+        let rows;
+        if (id) {
+            [rows] = await mysqlPool.query(
+                'SELECT batch, course, branch, current_year, current_semester, student_name FROM students WHERE id = ? LIMIT 1',
+                [id]
+            );
+        } else {
+            const adm = admission_number || admission_no;
+            [rows] = await mysqlPool.query(
+                'SELECT batch, course, branch, current_year, current_semester, student_name FROM students WHERE admission_number = ? OR admission_no = ? LIMIT 1',
+                [adm, adm]
+            );
+        }
+
+        if (!rows[0]) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
+
+        const result = await validateStudentAcademicContext(mysqlPool, rows[0], academicYear);
+        res.json(result);
+    } catch (error) {
+        if (error.code === 'ER_NO_SUCH_TABLE') {
+            return res.status(503).json({ message: 'Semesters or academic_years table not found in student database.' });
+        }
+        console.error('Error validating student academic context:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     searchStudents,
     getStudentProfile,
@@ -357,4 +428,6 @@ module.exports = {
     getCourseExpiry,
     setCourseExpiry,
     deleteCourseExpiry,
+    getAcademicYears,
+    getAcademicValidation,
 };
