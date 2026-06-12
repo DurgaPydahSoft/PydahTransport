@@ -14,13 +14,17 @@ const {
     deleteConcession,
     getApprovedPassengers,
     submitRouteChangeRequest,
-    getPassengerFullDetails
+    getPassengerFullDetails,
+    getIdCardsForPrint,
+    getIdCardApplicationNumbers
 } = require('../controllers/transportRequestController');
 
 router.get('/', getTransportRequests);
 router.post('/', createTransportRequest);
 router.get('/route-buses', getRouteBusVacancy);
 router.get('/approved-passengers', getApprovedPassengers);
+router.get('/id-cards-print', getIdCardsForPrint);
+router.get('/id-card-application-numbers', getIdCardApplicationNumbers);
 router.post('/change-request', submitRouteChangeRequest);
 router.get('/concessions', getConcessions);
 router.get('/stats', getDashboardStats);

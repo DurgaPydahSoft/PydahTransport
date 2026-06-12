@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { useReactToPrint } from 'react-to-print';
-import { FileText, Trash2, Calendar, Pencil, Users, CheckCircle2, XCircle, User, MapPin, GraduationCap, Clock, Bus } from 'lucide-react';
+import { FileText, Trash2, Calendar, Pencil, Users, CheckCircle2, XCircle, User, MapPin, GraduationCap, Clock, Bus, Printer } from 'lucide-react';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import TransportAdmitCard from '../components/TransportAdmitCard';
+import TransportBusIdCardSheet from '../components/TransportBusIdCardSheet';
 import Loader from '../components/Loader';
 import { apiFetch, API_BASE } from '../utils/api';
 import { triggerAdmitCardPrint } from '../utils/printAdmitCard';
@@ -58,9 +59,20 @@ const TransportRequests = () => {
     const [courseExpirySchemaOk, setCourseExpirySchemaOk] = useState(true);
     const [editingYears, setEditingYears] = useState({});
     const [detailModal, setDetailModal] = useState({ open: false, request: null });
+    const [idCardModalOpen, setIdCardModalOpen] = useState(false);
+    const [idCardAcademicYear, setIdCardAcademicYear] = useState(getDefaultAcademicYear());
+    const [idCardApplications, setIdCardApplications] = useState([]);
+    const [idCardApplicationsLoading, setIdCardApplicationsLoading] = useState(false);
+    const [idCardFromSerial, setIdCardFromSerial] = useState('');
+    const [idCardToSerial, setIdCardToSerial] = useState('');
+    const [idCardPerPage, setIdCardPerPage] = useState(5);
+    const [idCardPassengers, setIdCardPassengers] = useState([]);
+    const [idCardPrintLoading, setIdCardPrintLoading] = useState(false);
+    const [idCardPreviewCount, setIdCardPreviewCount] = useState(null);
     const academicYearOptions = getAcademicYearOptions();
 
     const admitCardRef = useRef();
+    const idCardSheetRef = useRef();
     const handlePrintAdmitCard = useReactToPrint({
         contentRef: admitCardRef,
         documentTitle: selectedPassPassenger
@@ -85,6 +97,141 @@ const TransportRequests = () => {
             alert('Error preparing admit card.');
         } finally {
             setFetchingPass(false);
+        }
+    };
+
+    const handlePrintIdCards = useReactToPrint({
+        contentRef: idCardSheetRef,
+        documentTitle: `Bus-ID-Cards-${idCardAcademicYear}`,
+        onAfterPrint: () => setIdCardPrintLoading(false),
+        onPrintError: () => setIdCardPrintLoading(false),
+    });
+
+    const fetchIdCardApplications = async (year) => {
+        setIdCardApplicationsLoading(true);
+        try {
+            const response = await apiFetch(
+                `${API_BASE}/transport-requests/id-card-application-numbers?academicYear=${encodeURIComponent(year)}`
+            );
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                const apps = data.applications || [];
+                setIdCardApplications(apps);
+                if (apps.length > 0) {
+                    setIdCardFromSerial(String(apps[0].application_serial));
+                    setIdCardToSerial(String(apps[apps.length - 1].application_serial));
+                } else {
+                    setIdCardFromSerial('');
+                    setIdCardToSerial('');
+                }
+                setIdCardPreviewCount(null);
+            } else {
+                setIdCardApplications([]);
+                setIdCardFromSerial('');
+                setIdCardToSerial('');
+                setMessage({ text: data.message || 'Failed to load transport application numbers.', type: 'error' });
+            }
+        } catch {
+            setIdCardApplications([]);
+            setIdCardFromSerial('');
+            setIdCardToSerial('');
+            setMessage({ text: 'Error loading transport application numbers.', type: 'error' });
+        } finally {
+            setIdCardApplicationsLoading(false);
+        }
+    };
+
+    const openIdCardModal = () => {
+        setIdCardAcademicYear(academicYear);
+        setIdCardPreviewCount(null);
+        setIdCardModalOpen(true);
+    };
+
+    const closeIdCardModal = () => {
+        if (idCardPrintLoading) return;
+        setIdCardModalOpen(false);
+        setIdCardPreviewCount(null);
+    };
+
+    const handleIdCardFromChange = (serial) => {
+        setIdCardFromSerial(serial);
+        setIdCardPreviewCount(null);
+        if (idCardToSerial && Number(idCardToSerial) < Number(serial)) {
+            setIdCardToSerial(serial);
+        }
+    };
+
+    const idCardToOptions = idCardApplications.filter(
+        (app) => !idCardFromSerial || Number(app.application_serial) >= Number(idCardFromSerial)
+    );
+
+    const validateIdCardRange = () => {
+        if (!idCardApplications.length) {
+            setMessage({ text: 'No approved transport application numbers found for this academic year.', type: 'error' });
+            return null;
+        }
+        const fromSerial = Number(idCardFromSerial);
+        const toSerial = Number(idCardToSerial);
+        if (!Number.isFinite(fromSerial) || !Number.isFinite(toSerial) || toSerial < fromSerial) {
+            setMessage({ text: 'Select a valid transport application number range (From ≤ To).', type: 'error' });
+            return null;
+        }
+        return { fromSerial, toSerial };
+    };
+
+    const handlePreviewIdCardCount = async () => {
+        const range = validateIdCardRange();
+        if (!range) return;
+        const { fromSerial, toSerial } = range;
+        setIdCardPrintLoading(true);
+        try {
+            const response = await apiFetch(
+                `${API_BASE}/transport-requests/id-cards-print?academicYear=${encodeURIComponent(idCardAcademicYear)}&fromSerial=${fromSerial}&toSerial=${toSerial}`
+            );
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                setIdCardPreviewCount(data.count ?? 0);
+            } else {
+                setMessage({ text: data.message || 'Failed to preview ID cards.', type: 'error' });
+            }
+        } catch {
+            setMessage({ text: 'Error previewing ID cards.', type: 'error' });
+        } finally {
+            setIdCardPrintLoading(false);
+        }
+    };
+
+    const handleConfirmPrintIdCards = async () => {
+        const range = validateIdCardRange();
+        if (!range) return;
+        const { fromSerial, toSerial } = range;
+        setIdCardPrintLoading(true);
+        try {
+            const response = await apiFetch(
+                `${API_BASE}/transport-requests/id-cards-print?academicYear=${encodeURIComponent(idCardAcademicYear)}&fromSerial=${fromSerial}&toSerial=${toSerial}`
+            );
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                setMessage({ text: data.message || 'Failed to load ID cards for printing.', type: 'error' });
+                setIdCardPrintLoading(false);
+                return;
+            }
+            const passengers = data.passengers || [];
+            if (!passengers.length) {
+                setMessage({ text: 'No approved passengers found in that application number range.', type: 'error' });
+                setIdCardPrintLoading(false);
+                return;
+            }
+            flushSync(() => {
+                setIdCardPassengers(passengers);
+                setIdCardPreviewCount(passengers.length);
+            });
+            await triggerAdmitCardPrint(handlePrintIdCards, idCardSheetRef);
+            setIdCardModalOpen(false);
+        } catch (error) {
+            console.error('Error printing ID cards:', error);
+            setMessage({ text: 'Error preparing ID cards for print.', type: 'error' });
+            setIdCardPrintLoading(false);
         }
     };
 
@@ -334,6 +481,12 @@ const TransportRequests = () => {
     }, [courseExpiryModalOpen, academicYear]);
 
     useEffect(() => {
+        if (idCardModalOpen) {
+            fetchIdCardApplications(idCardAcademicYear);
+        }
+    }, [idCardModalOpen, idCardAcademicYear]);
+
+    useEffect(() => {
         fetchRequests();
         setCurrentPage(1);
     }, [routeFilter, courseFilter, statusFilter, searchQuery]);
@@ -482,14 +635,24 @@ const TransportRequests = () => {
                     <h2 className="text-3xl font-extrabold text-gray-800 tracking-tight">Transport Requests</h2>
                     <p className="text-gray-500 mt-1">View, approve, or reject student transport requests. Approval creates the transport fee (TRN01) in Fee Management.</p>
                 </div>
-                <button
-                    type="button"
-                    onClick={openCourseExpiryModal}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50 shadow-sm"
-                >
-                    <Calendar size={18} />
-                    Course Expiry Settings
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={openIdCardModal}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50 shadow-sm"
+                    >
+                        <Printer size={18} />
+                        Print ID Cards
+                    </button>
+                    <button
+                        type="button"
+                        onClick={openCourseExpiryModal}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50 shadow-sm"
+                    >
+                        <Calendar size={18} />
+                        Course Expiry Settings
+                    </button>
+                </div>
             </div>
 
             {/* Stats Cards */}
@@ -1170,6 +1333,152 @@ const TransportRequests = () => {
                     </>
                 )}
             </Modal>
+
+            <Modal
+                isOpen={idCardModalOpen}
+                onClose={closeIdCardModal}
+                title="Print Bus ID Cards"
+                maxWidth="max-w-lg"
+            >
+                <p className="text-sm text-slate-500 mb-5">
+                    Select academic year, transport application number range, and how many ID cards to print per A4 page
+                    (front + back layout as per the official template).
+                </p>
+
+                {idCardApplicationsLoading ? (
+                    <Loader text="Loading transport application numbers..." />
+                ) : (
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                            Academic Year
+                        </label>
+                        <select
+                            value={idCardAcademicYear}
+                            onChange={(e) => setIdCardAcademicYear(e.target.value)}
+                            disabled={idCardPrintLoading}
+                            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-60"
+                        >
+                            {academicYearOptions.map((year) => (
+                                <option key={year} value={year}>{year}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {!idCardApplications.length ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                            No approved transport application numbers found for {idCardAcademicYear}.
+                        </div>
+                    ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                                From Transport Application No.
+                            </label>
+                            <select
+                                value={idCardFromSerial}
+                                onChange={(e) => handleIdCardFromChange(e.target.value)}
+                                disabled={idCardPrintLoading}
+                                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-60"
+                            >
+                                {idCardApplications.map((app) => (
+                                    <option key={`from-${app.id}-${app.application_serial}`} value={app.application_serial}>
+                                        {app.application_number} — {app.student_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                                To Transport Application No.
+                            </label>
+                            <select
+                                value={idCardToSerial}
+                                onChange={(e) => {
+                                    setIdCardToSerial(e.target.value);
+                                    setIdCardPreviewCount(null);
+                                }}
+                                disabled={idCardPrintLoading}
+                                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-60"
+                            >
+                                {idCardToOptions.map((app) => (
+                                    <option key={`to-${app.id}-${app.application_serial}`} value={app.application_serial}>
+                                        {app.application_number} — {app.student_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    )}
+
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                            Cards Per Page
+                        </label>
+                        <div className="flex gap-3">
+                            {[5, 6].map((count) => (
+                                <button
+                                    key={count}
+                                    type="button"
+                                    onClick={() => setIdCardPerPage(count)}
+                                    className={`flex-1 py-2.5 rounded-xl border text-sm font-semibold transition-colors ${
+                                        idCardPerPage === count
+                                            ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                            : 'border-gray-200 bg-white text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {count} per page
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {idCardPreviewCount != null && (
+                        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                            <strong>{idCardPreviewCount}</strong> approved passenger{idCardPreviewCount === 1 ? '' : 's'} found in this range.
+                            {idCardPreviewCount > 0 && (
+                                <span> Will print across {Math.ceil(idCardPreviewCount / idCardPerPage)} page{Math.ceil(idCardPreviewCount / idCardPerPage) === 1 ? '' : 's'}.</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+                )}
+
+                <div className="flex flex-wrap gap-3 mt-6">
+                    <button
+                        type="button"
+                        onClick={handleConfirmPrintIdCards}
+                        disabled={idCardPrintLoading || idCardApplicationsLoading || !idCardApplications.length}
+                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Printer size={18} />
+                        {idCardPrintLoading ? 'Preparing…' : 'Print ID Cards'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handlePreviewIdCardCount}
+                        disabled={idCardPrintLoading || idCardApplicationsLoading || !idCardApplications.length}
+                        className="px-4 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        Preview Count
+                    </button>
+                    <button
+                        type="button"
+                        onClick={closeIdCardModal}
+                        disabled={idCardPrintLoading}
+                        className="px-4 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </Modal>
+
+            <TransportBusIdCardSheet
+                ref={idCardSheetRef}
+                passengers={idCardPassengers}
+                academicYear={idCardAcademicYear}
+                cardsPerPage={idCardPerPage}
+            />
         </Layout >
     );
 };

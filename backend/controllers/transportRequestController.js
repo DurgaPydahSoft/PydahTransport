@@ -1652,6 +1652,165 @@ const getRouteBusVacancy = async (req, res) => {
     }
 };
 
+// @desc    List approved transport application numbers for an academic year (ID card print picker)
+// @route   GET /api/transport-requests/id-card-application-numbers?academicYear=2025-2026
+// @access  Private/Admin
+const getIdCardApplicationNumbers = async (req, res) => {
+    try {
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
+        const academicYear = resolveAcademicYear(req.query);
+        const fallbackAcademicYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+
+        const [mysqlRows] = await mysqlPool.query(
+            `SELECT tr.id,
+                    tr.application_number,
+                    tr.application_serial,
+                    tr.student_name,
+                    tr.admission_number
+             FROM transport_requests tr
+             WHERE tr.status = 'approved'
+               AND tr.application_number IS NOT NULL
+               AND tr.application_serial IS NOT NULL
+               AND COALESCE(tr.academic_year, ?) = ?
+             ORDER BY tr.application_serial ASC`,
+            [fallbackAcademicYear, academicYear]
+        );
+
+        const mongoRows = await EmployeeTransportRequest.find({
+            status: 'approved',
+            application_number: { $ne: null },
+            application_serial: { $ne: null },
+            $or: [
+                { academic_year: academicYear },
+                { academic_year: null },
+                { academic_year: { $exists: false } },
+            ],
+        })
+            .sort({ application_serial: 1 })
+            .lean();
+
+        const employeeApplications = mongoRows
+            .filter((r) => (r.academic_year || fallbackAcademicYear) === academicYear)
+            .map((r) => ({
+                id: r._id.toString(),
+                application_number: r.application_number,
+                application_serial: Number(r.application_serial),
+                student_name: r.employee_name,
+                admission_number: r.emp_no,
+                user_type: 'employee',
+            }));
+
+        const studentApplications = mysqlRows.map((r) => ({
+            id: r.id,
+            application_number: r.application_number,
+            application_serial: Number(r.application_serial),
+            student_name: r.student_name,
+            admission_number: r.admission_number,
+            user_type: 'student',
+        }));
+
+        const applications = [...studentApplications, ...employeeApplications].sort(
+            (a, b) => a.application_serial - b.application_serial
+        );
+
+        res.json({
+            academic_year: academicYear,
+            count: applications.length,
+            applications,
+        });
+    } catch (error) {
+        console.error('Error fetching ID card application numbers:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Batch fetch approved passengers for Bus ID card printing (by application serial range)
+// @route   GET /api/transport-requests/id-cards-print?academicYear=2025-2026&fromSerial=1&toSerial=50
+// @access  Private/Admin
+const getIdCardsForPrint = async (req, res) => {
+    try {
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'MySQL connection not established' });
+        }
+
+        const academicYear = resolveAcademicYear(req.query);
+        const fromSerial = Number(req.query.fromSerial ?? req.query.from_serial ?? 1);
+        const toSerial = Number(req.query.toSerial ?? req.query.to_serial ?? fromSerial);
+
+        if (!Number.isFinite(fromSerial) || !Number.isFinite(toSerial) || fromSerial < 1 || toSerial < fromSerial) {
+            return res.status(400).json({ message: 'Valid fromSerial and toSerial are required (fromSerial <= toSerial, both >= 1).' });
+        }
+
+        const { resolveStudentPhoto } = require('../utils/studentPhoto');
+        const fallbackAcademicYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+
+        const [mysqlRows] = await mysqlPool.query(
+            `SELECT tr.*,
+                    COALESCE(s1.course, s2.course) as course,
+                    COALESCE(s1.branch, s2.branch) as branch,
+                    COALESCE(s1.student_photo, s2.student_photo) as student_photo,
+                    COALESCE(s1.student_data, s2.student_data) as student_data,
+                    COALESCE(s1.pin_no, s2.pin_no) as pin_no
+             FROM transport_requests tr
+             LEFT JOIN students s1 ON tr.admission_number = s1.admission_number
+             LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
+             WHERE tr.status = 'approved'
+               AND tr.application_serial IS NOT NULL
+               AND tr.application_serial BETWEEN ? AND ?
+               AND COALESCE(tr.academic_year, ?) = ?
+             ORDER BY tr.application_serial ASC`,
+            [fromSerial, toSerial, fallbackAcademicYear, academicYear]
+        );
+
+        const studentPassengers = mysqlRows.map((row) => ({
+            ...row,
+            student_photo: resolveStudentPhoto(row),
+            user_type: 'student',
+        }));
+
+        const mongoRows = await EmployeeTransportRequest.find({
+            status: 'approved',
+            application_serial: { $gte: fromSerial, $lte: toSerial },
+            $or: [
+                { academic_year: academicYear },
+                { academic_year: null },
+                { academic_year: { $exists: false } },
+            ],
+        })
+            .sort({ application_serial: 1 })
+            .lean();
+
+        const employeePassengers = mongoRows
+            .filter((r) => (r.academic_year || fallbackAcademicYear) === academicYear)
+            .map((r) => ({
+                ...r,
+                id: r._id.toString(),
+                admission_number: r.emp_no,
+                student_name: r.employee_name,
+                user_type: 'employee',
+                course: 'Employee',
+            }));
+
+        const combined = [...studentPassengers, ...employeePassengers].sort(
+            (a, b) => Number(a.application_serial) - Number(b.application_serial)
+        );
+
+        res.json({
+            academic_year: academicYear,
+            from_serial: fromSerial,
+            to_serial: toSerial,
+            count: combined.length,
+            passengers: combined,
+        });
+    } catch (error) {
+        console.error('Error fetching ID cards for print:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getTransportRequests,
     getRouteBusVacancy,
@@ -1667,6 +1826,8 @@ module.exports = {
     getApprovedPassengers,
     submitRouteChangeRequest,
     getPassengerFullDetails,
+    getIdCardApplicationNumbers,
+    getIdCardsForPrint,
     getDefaultAcademicYear,
     resolveAcademicYear,
     getActivePassengerSqlParts,
