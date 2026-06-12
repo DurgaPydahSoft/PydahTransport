@@ -1,5 +1,6 @@
 import React, { forwardRef, useMemo } from 'react';
 import { normalizeStudentPhoto } from '../utils/studentPhoto';
+import TransportIdCardQr from './TransportIdCardQr';
 
 const LOGO_SRC = '/PYDAH_LOGO_PHOTO.jpg';
 const BUS_HELPLINE = '8500059344';
@@ -124,13 +125,17 @@ const BusIdCardFront = ({ passenger, academicYear, isTemplate = false }) => {
     );
 };
 
-const BusIdCardBack = ({ isTemplate = false }) => (
+const BusIdCardBack = ({ passenger, isTemplate = false }) => (
     <div className="id-card-back">
         <div className="id-back-layout">
-            <div className="id-back-qr-box" aria-label={isTemplate ? 'QR code placeholder' : 'QR code'}>
-                <div className="id-back-qr-square">
-                    <span className="id-back-qr-label">QR</span>
-                </div>
+            <div className="id-back-qr-box" aria-label={isTemplate ? 'QR code placeholder' : 'Transport verification QR code'}>
+                {isTemplate || !passenger ? (
+                    <div className="id-back-qr-square">
+                        <span className="id-back-qr-label">QR</span>
+                    </div>
+                ) : (
+                    <TransportIdCardQr passenger={passenger} qrDataUrl={passenger.qrDataUrl} />
+                )}
             </div>
             <div className="id-back-text">
                 <div className="id-back-text-terms">
@@ -479,18 +484,23 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                         padding: 0 0.5mm 0 0;
                         background: #fff;
                     }
-                    .id-back-qr-square {
+                    .id-back-qr-square,
+                    .id-back-qr-image {
                         height: 100%;
                         width: auto;
                         max-width: 100%;
                         aspect-ratio: 1 / 1;
                         border: 1px solid #000;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
+                        display: block;
                         box-sizing: border-box;
                         background: #fff;
                         margin: 0 auto;
+                        object-fit: contain;
+                    }
+                    .id-back-qr-square {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
                     }
                     .id-back-qr-label {
                         font-size: 7pt;
@@ -587,7 +597,7 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                                         </div>
                                         <div className="id-card-v-divider" aria-hidden="true" />
                                         <div className="id-card-half id-card-half--back">
-                                            <BusIdCardBack isTemplate={!slot.passenger} />
+                                            <BusIdCardBack passenger={slot.passenger} isTemplate={!slot.passenger} />
                                         </div>
                                     </div>
                                     {slotIndex < cardsPerPage - 1 && (

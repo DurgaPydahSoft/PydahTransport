@@ -9,6 +9,8 @@ import TransportBusIdCardSheet from '../components/TransportBusIdCardSheet';
 import Loader from '../components/Loader';
 import { apiFetch, API_BASE } from '../utils/api';
 import { triggerAdmitCardPrint } from '../utils/printAdmitCard';
+import QRCode from 'qrcode';
+import { getTransportVerifyUrl } from '../utils/siteUrl';
 
 const statusDisplay = (s) => (s || 'pending').charAt(0).toUpperCase() + (s || 'pending').slice(1);
 
@@ -222,9 +224,25 @@ const TransportRequests = () => {
                 setIdCardPrintLoading(false);
                 return;
             }
+            const passengersWithQr = await Promise.all(
+                passengers.map(async (passenger) => {
+                    const verifyUrl = getTransportVerifyUrl(passenger.id ?? passenger._id);
+                    if (!verifyUrl) return passenger;
+                    try {
+                        const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
+                            errorCorrectionLevel: 'M',
+                            margin: 1,
+                            width: 256,
+                        });
+                        return { ...passenger, qrDataUrl };
+                    } catch {
+                        return passenger;
+                    }
+                })
+            );
             flushSync(() => {
-                setIdCardPassengers(passengers);
-                setIdCardPreviewCount(passengers.length);
+                setIdCardPassengers(passengersWithQr);
+                setIdCardPreviewCount(passengersWithQr.length);
             });
             await triggerAdmitCardPrint(handlePrintIdCards, idCardSheetRef);
             setIdCardModalOpen(false);

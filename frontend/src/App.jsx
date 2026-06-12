@@ -13,6 +13,7 @@ import UserManagement from './pages/UserManagement';
 import AdminRaiseRequest from './pages/AdminRaiseRequest';
 import Concessions from './pages/Concessions';
 import Inventory from './pages/Inventory';
+import TransportVerify from './pages/TransportVerify';
 import './App.css';
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/verify-transport/:id" element={<TransportVerify />} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/buses" element={<ProtectedRoute><BusManagement /></ProtectedRoute>} />
           <Route path="/buses/:id" element={<ProtectedRoute><BusDetails /></ProtectedRoute>} />

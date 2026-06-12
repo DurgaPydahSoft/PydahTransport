@@ -17,8 +17,11 @@ const routeRoutes = require('./routes/routeRoutes');
 const authRoutes = require('./routes/authRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 
-// Public auth only; all other /api routes require a valid JWT
+const { verifyTransportPassenger } = require('./controllers/transportRequestController');
+
+// Public routes
 app.use('/api/auth', authRoutes);
+app.get('/api/transport-verify/:id', verifyTransportPassenger);
 app.use('/api/buses', protect, busRoutes);
 app.use('/api/routes', protect, routeRoutes);
 app.use('/api/employees', employeeRoutes);

@@ -1811,6 +1811,113 @@ const getIdCardsForPrint = async (req, res) => {
     }
 };
 
+// @desc    Public verification for transport bus ID card QR scan
+// @route   GET /api/transport-verify/:id
+// @access  Public
+const verifyTransportPassenger = async (req, res) => {
+    const requestId = req.params.id;
+    try {
+        if (isMongoId(requestId)) {
+            const reqRow = await EmployeeTransportRequest.findById(requestId).lean();
+            if (!reqRow) {
+                return res.json({ registered: false, message: 'No transport registration found for this QR code.' });
+            }
+            if (reqRow.status !== 'approved') {
+                return res.json({
+                    registered: false,
+                    message: `Transport record exists but is not active (status: ${reqRow.status}).`,
+                    student_name: reqRow.employee_name,
+                    admission_number: reqRow.emp_no,
+                    status: reqRow.status,
+                });
+            }
+            return res.json({
+                registered: true,
+                user_type: 'employee',
+                student_name: reqRow.employee_name,
+                admission_number: reqRow.emp_no,
+                course: 'Employee',
+                route_id: reqRow.route_id,
+                route_name: reqRow.route_name,
+                stage_name: reqRow.stage_name,
+                bus_id: reqRow.bus_id,
+                fare: reqRow.fare,
+                academic_year: reqRow.academic_year,
+                application_number: reqRow.application_number,
+                application_serial: reqRow.application_serial,
+                status: reqRow.status,
+            });
+        }
+
+        if (!mysqlPool) {
+            return res.status(500).json({ message: 'Service unavailable' });
+        }
+
+        const { resolveStudentPhoto } = require('../utils/studentPhoto');
+        const fallbackAcademicYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+        const parts = getActivePassengerSqlParts(fallbackAcademicYear);
+
+        const [rows] = await mysqlPool.query(
+            `SELECT tr.*,
+                    COALESCE(s1.course, s2.course) as course,
+                    COALESCE(s1.branch, s2.branch) as branch,
+                    COALESCE(s1.student_photo, s2.student_photo) as student_photo,
+                    COALESCE(s1.student_data, s2.student_data) as student_data,
+                    COALESCE(s1.pin_no, s2.pin_no) as pin_no,
+                    COALESCE(s1.student_mobile, s2.student_mobile) as student_mobile,
+                    ${parts.effectiveExpiryExpr} as effective_expiry_date,
+                    ${parts.isExpiredExpr} as is_expired
+             FROM transport_requests tr
+             LEFT JOIN students s1 ON tr.admission_number = s1.admission_number
+             LEFT JOIN students s2 ON tr.admission_number = s2.admission_no AND s1.id IS NULL
+             ${parts.expiryJoins}
+             WHERE tr.id = ?`,
+            [...parts.expiryParams, requestId]
+        );
+
+        if (!rows[0]) {
+            return res.json({ registered: false, message: 'No transport registration found for this QR code.' });
+        }
+
+        const row = rows[0];
+        if (row.status !== 'approved') {
+            return res.json({
+                registered: false,
+                message: `Transport record exists but is not active (status: ${row.status}).`,
+                student_name: row.student_name,
+                admission_number: row.admission_number,
+                status: row.status,
+            });
+        }
+
+        return res.json({
+            registered: true,
+            user_type: 'student',
+            student_name: row.student_name,
+            admission_number: row.admission_number,
+            pin_no: row.pin_no,
+            course: row.course,
+            branch: row.branch,
+            route_id: row.route_id,
+            route_name: row.route_name,
+            stage_name: row.stage_name,
+            bus_id: row.bus_id,
+            fare: row.fare,
+            academic_year: row.academic_year,
+            application_number: row.application_number,
+            application_serial: row.application_serial,
+            status: row.status,
+            student_photo: resolveStudentPhoto(row),
+            student_mobile: row.student_mobile,
+            effective_expiry_date: row.effective_expiry_date,
+            is_expired: Boolean(row.is_expired),
+        });
+    } catch (error) {
+        console.error('Error verifying transport pass:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getTransportRequests,
     getRouteBusVacancy,
@@ -1828,6 +1935,7 @@ module.exports = {
     getPassengerFullDetails,
     getIdCardApplicationNumbers,
     getIdCardsForPrint,
+    verifyTransportPassenger,
     getDefaultAcademicYear,
     resolveAcademicYear,
     getActivePassengerSqlParts,
