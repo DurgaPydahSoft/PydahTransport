@@ -266,6 +266,7 @@ const TransportRequests = () => {
         try {
             let url = `${API_BASE}/transport-requests?`;
             const params = new URLSearchParams();
+            if (academicYear) params.append('academicYear', academicYear);
             if (routeFilter) params.append('route_id', routeFilter);
             if (courseFilter) params.append('course', courseFilter);
             if (statusFilter) params.append('status', statusFilter);
@@ -507,7 +508,7 @@ const TransportRequests = () => {
     useEffect(() => {
         fetchRequests();
         setCurrentPage(1);
-    }, [routeFilter, courseFilter, statusFilter, searchQuery]);
+    }, [academicYear, routeFilter, courseFilter, statusFilter, searchQuery]);
 
     const calculateStats = () => {
         const total = requests.length;
@@ -719,8 +720,21 @@ const TransportRequests = () => {
                 </div>
             )}
 
-            <div className="flex w-full items-center gap-2 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                <div className="flex-[2] min-w-0 relative">
+            <div className="flex w-full flex-wrap items-center gap-2 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <div className="flex-1 min-w-[140px]">
+                    <select
+                        value={academicYear}
+                        onChange={(e) => setAcademicYear(e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-gray-700"
+                    >
+                        <option value="">All Academic Years</option>
+                        {academicYearOptions.map((year) => (
+                            <option key={year} value={year}>{year}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="flex-[2] min-w-[180px] relative">
                     <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                     <input
                         type="text"
@@ -731,7 +745,7 @@ const TransportRequests = () => {
                     />
                 </div>
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[120px]">
                     <select
                         value={routeFilter}
                         onChange={(e) => setRouteFilter(e.target.value)}
@@ -744,7 +758,7 @@ const TransportRequests = () => {
                     </select>
                 </div>
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[120px]">
                     <select
                         value={courseFilter}
                         onChange={(e) => setCourseFilter(e.target.value)}
@@ -757,7 +771,7 @@ const TransportRequests = () => {
                     </select>
                 </div>
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-[120px]">
                     <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value)}
@@ -789,7 +803,9 @@ const TransportRequests = () => {
                 </div>
             ) : requests.length === 0 ? (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-                    <p className="text-gray-500">No transport requests found.</p>
+                    <p className="text-gray-500">
+                        No transport requests found{academicYear ? ` for academic year ${academicYear}` : ''}.
+                    </p>
                 </div>
             ) : (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
