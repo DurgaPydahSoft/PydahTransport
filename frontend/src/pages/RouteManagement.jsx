@@ -3,6 +3,7 @@ import Layout from '../components/Layout';
 import Modal from '../components/Modal';
 import Loader from '../components/Loader';
 import { apiFetch } from '../utils/api';
+import { getDefaultAcademicYear, getAcademicYearOptions } from '../utils/academicYear';
 import {
     Map,
     Edit,
@@ -20,9 +21,19 @@ import {
 
 const API = import.meta.env.VITE_API_URL || '';
 
+const resolveStageFareForYear = (stage, year) => {
+    const overrides = Array.isArray(stage.academicYearFares) ? stage.academicYearFares : [];
+    const match = overrides.find((item) => item.academicYear === year);
+    if (match) return Number(match.fare);
+    return Number(stage.baseFare ?? stage.fare ?? 0);
+};
+
 const RouteManagement = () => {
     const [routes, setRoutes] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [saveMessage, setSaveMessage] = useState({ text: '', type: '' });
+    const [academicYear, setAcademicYear] = useState(getDefaultAcademicYear);
+    const academicYearOptions = getAcademicYearOptions();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [expandedRouteId, setExpandedRouteId] = useState(null);
@@ -36,22 +47,32 @@ const RouteManagement = () => {
         stages: [] // Start with empty stages
     });
 
-    const fetchRoutes = async () => {
+    const fetchRoutes = async (year = academicYear) => {
         setLoading(true);
         try {
-            const response = await apiFetch(`${API}/routes`);
+            const response = await apiFetch(
+                `${API}/routes?academicYear=${encodeURIComponent(year)}&_=${Date.now()}`
+            );
             const data = await response.json();
-            setRoutes(data);
+            setRoutes(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Error fetching routes:', error);
+            setSaveMessage({ text: 'Failed to load routes for the selected academic year.', type: 'error' });
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchRoutes();
-    }, []);
+        setIsModalOpen(false);
+        setEditingId(null);
+        setFormData({
+            routeId: '', routeName: '', startPoint: '', endPoint: '',
+            totalDistance: '', estimatedTime: '', stages: []
+        });
+        setExpandedRouteId(null);
+        fetchRoutes(academicYear);
+    }, [academicYear]);
 
     const toggleRoute = (id) => {
         setExpandedRouteId(expandedRouteId === id ? null : id);
@@ -75,7 +96,7 @@ const RouteManagement = () => {
     const addStage = () => {
         setFormData(prev => ({
             ...prev,
-            stages: [...prev.stages, { stageName: '', distanceFromStart: '', fare: 0 }]
+            stages: [...prev.stages, { stageName: '', distanceFromStart: '', fare: 0, academicYearFares: [] }]
         }));
     };
 
@@ -93,7 +114,13 @@ const RouteManagement = () => {
             endPoint: route.endPoint,
             totalDistance: route.totalDistance,
             estimatedTime: route.estimatedTime,
-            stages: route.stages || []
+            stages: (route.stages || []).map((stage) => ({
+                stageName: stage.stageName,
+                distanceFromStart: stage.distanceFromStart,
+                fare: resolveStageFareForYear(stage, academicYear),
+                baseFare: stage.baseFare ?? stage.fare,
+                academicYearFares: stage.academicYearFares || [],
+            })),
         });
         setEditingId(route._id);
         setIsModalOpen(true);
@@ -109,7 +136,7 @@ const RouteManagement = () => {
             });
 
             if (response.ok) {
-                fetchRoutes();
+                fetchRoutes(academicYear);
             } else {
                 alert('Failed to delete route');
             }
@@ -137,21 +164,49 @@ const RouteManagement = () => {
 
             const method = editingId ? 'PUT' : 'POST';
 
+            const payload = {
+                routeId: formData.routeId,
+                routeName: formData.routeName,
+                startPoint: formData.startPoint,
+                endPoint: formData.endPoint,
+                totalDistance: formData.totalDistance,
+                estimatedTime: formData.estimatedTime,
+                stages: formData.stages.map((stage) => ({
+                    stageName: stage.stageName,
+                    distanceFromStart: stage.distanceFromStart,
+                    fare: Number(stage.fare),
+                    baseFare: stage.baseFare,
+                    academicYearFares: stage.academicYearFares || [],
+                })),
+                editingAcademicYear: academicYear,
+            };
+
             const response = await apiFetch(url, {
                 method: method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(payload),
             });
 
+            const data = await response.json().catch(() => ({}));
             if (response.ok) {
                 handleCloseModal();
-                fetchRoutes();
+                await fetchRoutes(academicYear);
+                setSaveMessage({
+                    text: `Route ${editingId ? 'updated' : 'created'} for academic year ${academicYear}.`,
+                    type: 'success',
+                });
             } else {
-                alert(`Failed to ${editingId ? 'update' : 'create'} route`);
+                setSaveMessage({
+                    text: data.message || `Failed to ${editingId ? 'update' : 'create'} route`,
+                    type: 'error',
+                });
             }
         } catch (error) {
             console.error(`Error ${editingId ? 'updating' : 'creating'} route:`, error);
-            alert(`Error ${editingId ? 'updating' : 'creating'} route`);
+            setSaveMessage({
+                text: `Error ${editingId ? 'updating' : 'creating'} route`,
+                type: 'error',
+            });
         }
     };
 
@@ -160,15 +215,35 @@ const RouteManagement = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <div>
                     <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Route Network ({routes.length})</h2>
-                    <p className="text-slate-600 mt-1">Design routes, manage stages, and set fares.</p>
+                    <p className="text-slate-600 mt-1">Design routes, manage stages, and set fares per academic year.</p>
                 </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="bg-blue-900 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md transition-all hover:shadow-lg active:scale-95 flex items-center group"
-                >
-                    Create Route
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wider">Academic Year</label>
+                        <select
+                            value={academicYear}
+                            onChange={(e) => setAcademicYear(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
+                        >
+                            {academicYearOptions.map((year) => (
+                                <option key={year} value={year}>{year}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="bg-blue-900 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md transition-all hover:shadow-lg active:scale-95 flex items-center group self-end"
+                    >
+                        Create Route
+                    </button>
+                </div>
             </div>
+
+            {saveMessage.text && (
+                <div className={`mb-6 p-4 rounded-xl border ${saveMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                    {saveMessage.text}
+                </div>
+            )}
 
             {loading ? (
                 <div className="flex items-center justify-center py-20">
@@ -266,13 +341,17 @@ const RouteManagement = () => {
                                                     <td colSpan="5" className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 animate-in fade-in slide-in-from-top-2 duration-300">
                                                         <div className="flex items-center gap-2 mb-4">
                                                             <Milestone size={16} className="text-blue-600" />
-                                                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Stages & Fare Distribution</h4>
+                                                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                                                Stages & Fare Distribution ({academicYear})
+                                                            </h4>
                                                         </div>
                                                         {route.stages.length === 0 ? (
                                                             <p className="text-xs text-slate-400 italic py-2">No stages defined for this route network.</p>
                                                         ) : (
                                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                                                                {route.stages.map((stage, index) => (
+                                                                {route.stages.map((stage, index) => {
+                                                                    const displayFare = resolveStageFareForYear(stage, academicYear);
+                                                                    return (
                                                                     <div key={index} className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group/stage hover:border-blue-200 transition-colors">
                                                                         <div className="flex items-center gap-3">
                                                                             <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-xs group-hover/stage:bg-blue-600 group-hover/stage:text-white transition-colors">
@@ -283,11 +362,17 @@ const RouteManagement = () => {
                                                                                 <p className="text-xs text-slate-400 font-medium">{stage.distanceFromStart} km</p>
                                                                             </div>
                                                                         </div>
-                                                                        <div className="text-sm font-black text-slate-900 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 text-emerald-700">
-                                                                            ₹{stage.fare}
+                                                                        <div className="text-sm font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                                                                            ₹{displayFare}
+                                                                            {stage.hasYearOverride && stage.baseFare != null && stage.baseFare !== displayFare && (
+                                                                                <span className="block text-[10px] font-semibold text-slate-400 line-through">₹{stage.baseFare}</span>
+                                                                            )}
+                                                                            {!stage.hasYearOverride && (
+                                                                                <span className="block text-[10px] font-semibold text-slate-400">base fare</span>
+                                                                            )}
                                                                         </div>
                                                                     </div>
-                                                                ))}
+                                                                );})}
                                                             </div>
                                                         )}
                                                     </td>
@@ -337,7 +422,10 @@ const RouteManagement = () => {
 
                     <div className="border-t border-slate-200 pt-5">
                         <div className="flex justify-between items-center mb-4">
-                            <h4 className="font-bold text-slate-800">Route Stages</h4>
+                            <div>
+                                <h4 className="font-bold text-slate-800">Route Stages</h4>
+                                <p className="text-xs text-slate-500 mt-1">Fares below apply to academic year <span className="font-semibold text-slate-700">{academicYear}</span>.</p>
+                            </div>
                             <button type="button" onClick={addStage} className="text-sm bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-100 transition-colors">+ Add Stage</button>
                         </div>
                         <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
@@ -362,7 +450,7 @@ const RouteManagement = () => {
                                     <div>
                                         <div className="relative">
                                             <IndianRupee size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                            <input type="number" name="fare" placeholder="Fare Amount" value={stage.fare} onChange={(e) => handleStageChange(index, e)} className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
+                                            <input type="number" name="fare" placeholder={`Fare for ${academicYear}`} value={stage.fare} onChange={(e) => handleStageChange(index, e)} className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required />
                                         </div>
                                     </div>
                                 </div>

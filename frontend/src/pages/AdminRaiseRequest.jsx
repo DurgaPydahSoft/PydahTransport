@@ -106,15 +106,19 @@ const AdminRaiseRequest = () => {
     useEffect(() => {
         const fetchRoutes = async () => {
             try {
-                const response = await apiFetch(`${API_BASE}/routes`);
+                const response = await apiFetch(
+                    `${API_BASE}/routes?academicYear=${encodeURIComponent(academicYear)}`
+                );
                 const data = await response.json();
                 setRoutes(data);
+                setSelectedRoute(null);
+                setSelectedStage(null);
             } catch (error) {
                 console.error('Error fetching routes:', error);
             }
         };
         fetchRoutes();
-    }, []);
+    }, [academicYear]);
 
     useEffect(() => {
         const fetchAcademicYears = async () => {
@@ -310,7 +314,13 @@ const AdminRaiseRequest = () => {
                 if (data.busesOnRoute && data.busesOnRoute.length === 1) {
                     defaultBusId = data.busesOnRoute[0].busNumber;
                 }
-                setApproveModal((m) => ({ ...m, data, selectedBusId: defaultBusId, loading: false, error: null }));
+                setApproveModal((m) => ({
+                    ...m,
+                    data,
+                    selectedBusId: defaultBusId,
+                    loading: false,
+                    error: null,
+                }));
             } else {
                 setApproveModal((m) => ({ ...m, loading: false, error: data.message || 'Failed to load approval details' }));
             }
@@ -334,10 +344,11 @@ const AdminRaiseRequest = () => {
 
         setActionLoading(true);
         try {
+            const payload = { bus_id: approveModal.selectedBusId || null };
             const response = await apiFetch(`${API_BASE}/transport-requests/${id}/approve`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bus_id: approveModal.selectedBusId || null }),
+                body: JSON.stringify(payload),
             });
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
@@ -893,6 +904,13 @@ const AdminRaiseRequest = () => {
                                 </p>
                                 {!approveModal.data.application_number && approveModal.data.next_application_number && (
                                     <p className="text-xs text-indigo-600 mt-1">Will be assigned when you confirm approval</p>
+                                )}
+                                {(approveModal.data.college_code || approveModal.data.course_code) && (
+                                    <p className="text-xs text-indigo-600 mt-2">
+                                        College: <span className="font-semibold">{approveModal.data.college_code || approveModal.data.college_name || '—'}</span>
+                                        {' · '}
+                                        Course: <span className="font-semibold">{approveModal.data.course_code || approveModal.data.course_name || '—'}</span>
+                                    </p>
                                 )}
                             </div>
                         )}

@@ -1,10 +1,13 @@
 const { mysqlPool, getFeeConnection } = require('../config/db');
 const { getFeePortalModels } = require('../models/fee-portal-models');
 const Bus = require('../models/Bus');
+const Route = require('../models/Route');
 const mongoose = require('mongoose');
 const EmployeeTransportRequest = require('../models/EmployeeTransportRequest');
 const { validateStudentAcademicContext } = require('../utils/studentAcademicValidation');
 const { assignTransportApplicationNumber, peekNextTransportApplicationNumber } = require('../utils/transportApplicationNumber');
+const { resolveApplicationNumberContext } = require('../utils/applicationNumberContext');
+const { resolveRouteStageFare } = require('../utils/stageFare');
 
 const isMongoId = (id) => mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id);
 
@@ -242,13 +245,29 @@ async function getApplicationNumberForApprovalPreview(mysqlPool, requestRow) {
             academic_year: academicYear,
             application_number: requestRow.application_number,
             application_serial: requestRow.application_serial != null ? Number(requestRow.application_serial) : null,
+            college_code: requestRow.application_college_code || null,
+            course_code: requestRow.application_course_code || null,
         };
     }
 
     try {
-        const next = await peekNextTransportApplicationNumber(mysqlPool, academicYear);
+        const userType = requestRow.user_type || (requestRow.employee_name ? 'employee' : 'student');
+        const admissionNumber = requestRow.admission_number || requestRow.admission_no || requestRow.emp_no;
+        const context = await resolveApplicationNumberContext(mysqlPool, {
+            admissionNumber,
+            userType,
+        });
+        const next = await peekNextTransportApplicationNumber(mysqlPool, {
+            academicYear,
+            collegeCode: context.collegeCode,
+            courseCode: context.courseCode,
+        });
         return {
             academic_year: academicYear,
+            college_code: context.collegeCode,
+            course_code: context.courseCode,
+            college_name: context.collegeName,
+            course_name: context.courseName,
             next_application_number: next.application_number,
             next_application_serial: next.application_serial,
         };
@@ -292,6 +311,10 @@ const getSemesterOptions = async (req, res) => {
                 yearOfStudy: null,
                 route_id: routeId,
                 route_name: reqRow.route_name,
+                stage_name: reqRow.stage_name,
+                fare: Number(reqRow.fare) || 0,
+                resolved_fare: 0,
+                fare_mismatch: false,
                 busesOnRoute,
                 expiry: null,
                 user_type: 'employee',
@@ -325,6 +348,14 @@ const getSemesterOptions = async (req, res) => {
         }
 
         const applicationPreview = await getApplicationNumberForApprovalPreview(mysqlPool, transportRequest);
+        const academicYear = transportRequest.academic_year || process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+        const resolvedFare = await resolveRouteStageFare(
+            Route,
+            transportRequest.route_id,
+            transportRequest.stage_name,
+            academicYear
+        );
+        const storedFare = Number(transportRequest.fare);
 
         return res.json({
             requestId: Number(requestId),
@@ -334,6 +365,10 @@ const getSemesterOptions = async (req, res) => {
             yearOfStudy: student.current_year != null ? Number(student.current_year) : 1,
             route_id: routeId,
             route_name: routeName,
+            stage_name: transportRequest.stage_name,
+            fare: storedFare,
+            resolved_fare: resolvedFare,
+            fare_mismatch: resolvedFare != null && storedFare !== Number(resolvedFare),
             busesOnRoute,
             ...applicationPreview,
             expiry: lastSem
@@ -609,17 +644,24 @@ const approveTransportRequest = async (req, res) => {
                 return res.status(500).json({ message: 'MySQL connection not established' });
             }
 
-            const application = await assignTransportApplicationNumber(
-                mysqlPool,
-                resolvedAcademicYear,
-                reqRow.application_number,
-                reqRow.application_serial
-            );
+            const context = await resolveApplicationNumberContext(mysqlPool, {
+                admissionNumber: reqRow.emp_no,
+                userType: 'employee',
+            });
+            const application = await assignTransportApplicationNumber(mysqlPool, {
+                academicYear: resolvedAcademicYear,
+                collegeCode: context.collegeCode,
+                courseCode: context.courseCode,
+                existingApplicationNumber: reqRow.application_number,
+                existingApplicationSerial: reqRow.application_serial,
+            });
 
             reqRow.status = 'approved';
             reqRow.academic_year = resolvedAcademicYear;
             reqRow.application_number = application.application_number;
             reqRow.application_serial = application.application_serial;
+            reqRow.application_college_code = application.college_code;
+            reqRow.application_course_code = application.course_code;
             if (req.body.bus_id) {
                 reqRow.bus_id = req.body.bus_id;
             }
@@ -651,6 +693,14 @@ const approveTransportRequest = async (req, res) => {
         }
         if (request.status === 'rejected') {
             return res.status(400).json({ message: 'Request was rejected and cannot be approved' });
+        }
+
+        if (req.body.fare != null) {
+            const overrideFare = Number(req.body.fare);
+            if (Number.isFinite(overrideFare)) {
+                await mysqlPool.query('UPDATE transport_requests SET fare = ? WHERE id = ?', [overrideFare, requestId]);
+                request.fare = overrideFare;
+            }
         }
 
         // Expiry = last semester of student's year (same regardless of which sem they applied in)
@@ -746,6 +796,8 @@ const approveTransportRequest = async (req, res) => {
                 academicYear: resolvedAcademicYear,
                 existingApplicationNumber: request.application_number,
                 existingApplicationSerial: request.application_serial,
+                admissionNumber,
+                userType: 'student',
             });
 
             return res.json({
@@ -786,6 +838,8 @@ const approveTransportRequest = async (req, res) => {
             academicYear: resolvedAcademicYear,
             existingApplicationNumber: request.application_number,
             existingApplicationSerial: request.application_serial,
+            admissionNumber,
+            userType: 'student',
         });
 
         res.json({
@@ -798,9 +852,12 @@ const approveTransportRequest = async (req, res) => {
             expiry_date: lastSem?.end_date || null,
         });
     } catch (error) {
-        if (error.code === 'ER_NO_SUCH_TABLE' && String(error.message).includes('transport_application_counters')) {
+        if (error.code === 'ER_NO_SUCH_TABLE' && (
+            String(error.message).includes('transport_application_counters_v2')
+            || String(error.message).includes('transport_application_counters')
+        )) {
             return res.status(503).json({
-                message: 'Transport application counter table not found. Run backend/mysql-schema/add-transport-application-number.sql.',
+                message: 'Transport application counter table not found. Run backend/mysql-schema/alter-transport-application-counter-course-wise.sql.',
             });
         }
         if (error.code === 'ER_BAD_FIELD_ERROR' && String(error.message).includes('application_number')) {
@@ -864,25 +921,61 @@ async function markTransportRequestApproved(mysqlPool, requestId, {
     academicYear,
     existingApplicationNumber = null,
     existingApplicationSerial = null,
+    admissionNumber,
+    userType = 'student',
 }) {
-    const application = await assignTransportApplicationNumber(
-        mysqlPool,
+    const context = await resolveApplicationNumberContext(mysqlPool, {
+        admissionNumber,
+        userType,
+    });
+    const application = await assignTransportApplicationNumber(mysqlPool, {
         academicYear,
+        collegeCode: context.collegeCode,
+        courseCode: context.courseCode,
         existingApplicationNumber,
-        existingApplicationSerial
-    );
+        existingApplicationSerial,
+    });
 
-    await mysqlPool.query(
-        `UPDATE transport_requests
-         SET status = 'approved',
-             bus_id = ?,
-             application_number = ?,
-             application_serial = ?
-         WHERE id = ?`,
-        [bus_id || null, application.application_number, application.application_serial, requestId]
-    );
+    try {
+        await mysqlPool.query(
+            `UPDATE transport_requests
+             SET status = 'approved',
+                 bus_id = ?,
+                 application_number = ?,
+                 application_serial = ?,
+                 application_college_code = ?,
+                 application_course_code = ?
+             WHERE id = ?`,
+            [
+                bus_id || null,
+                application.application_number,
+                application.application_serial,
+                application.college_code,
+                application.course_code,
+                requestId,
+            ]
+        );
+    } catch (error) {
+        if (error.code === 'ER_BAD_FIELD_ERROR') {
+            await mysqlPool.query(
+                `UPDATE transport_requests
+                 SET status = 'approved',
+                     bus_id = ?,
+                     application_number = ?,
+                     application_serial = ?
+                 WHERE id = ?`,
+                [bus_id || null, application.application_number, application.application_serial, requestId]
+            );
+        } else {
+            throw error;
+        }
+    }
 
-    return application;
+    return {
+        ...application,
+        college_name: context.collegeName,
+        course_name: context.courseName,
+    };
 }
 
 async function updateTransportRequestSemester(mysqlPool, requestId, fields) {
@@ -1663,11 +1756,26 @@ const getIdCardApplicationNumbers = async (req, res) => {
 
         const academicYear = resolveAcademicYear(req.query);
         const fallbackAcademicYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+        const collegeCode = req.query.collegeCode || req.query.college_code || null;
+        const courseCode = req.query.courseCode || req.query.course_code || null;
+
+        const mysqlParams = [fallbackAcademicYear, academicYear];
+        let mysqlFilterSql = '';
+        if (collegeCode) {
+            mysqlFilterSql += ' AND tr.application_college_code = ?';
+            mysqlParams.push(collegeCode);
+        }
+        if (courseCode) {
+            mysqlFilterSql += ' AND tr.application_course_code = ?';
+            mysqlParams.push(courseCode);
+        }
 
         const [mysqlRows] = await mysqlPool.query(
             `SELECT tr.id,
                     tr.application_number,
                     tr.application_serial,
+                    tr.application_college_code,
+                    tr.application_course_code,
                     tr.student_name,
                     tr.admission_number
              FROM transport_requests tr
@@ -1675,11 +1783,12 @@ const getIdCardApplicationNumbers = async (req, res) => {
                AND tr.application_number IS NOT NULL
                AND tr.application_serial IS NOT NULL
                AND COALESCE(tr.academic_year, ?) = ?
-             ORDER BY tr.application_serial ASC`,
-            [fallbackAcademicYear, academicYear]
+               ${mysqlFilterSql}
+             ORDER BY tr.application_college_code ASC, tr.application_course_code ASC, tr.application_serial ASC`,
+            mysqlParams
         );
 
-        const mongoRows = await EmployeeTransportRequest.find({
+        const mongoQuery = {
             status: 'approved',
             application_number: { $ne: null },
             application_serial: { $ne: null },
@@ -1688,8 +1797,12 @@ const getIdCardApplicationNumbers = async (req, res) => {
                 { academic_year: null },
                 { academic_year: { $exists: false } },
             ],
-        })
-            .sort({ application_serial: 1 })
+        };
+        if (collegeCode) mongoQuery.application_college_code = collegeCode;
+        if (courseCode) mongoQuery.application_course_code = courseCode;
+
+        const mongoRows = await EmployeeTransportRequest.find(mongoQuery)
+            .sort({ application_college_code: 1, application_course_code: 1, application_serial: 1 })
             .lean();
 
         const employeeApplications = mongoRows
@@ -1698,6 +1811,8 @@ const getIdCardApplicationNumbers = async (req, res) => {
                 id: r._id.toString(),
                 application_number: r.application_number,
                 application_serial: Number(r.application_serial),
+                college_code: r.application_college_code,
+                course_code: r.application_course_code,
                 student_name: r.employee_name,
                 admission_number: r.emp_no,
                 user_type: 'employee',
@@ -1707,14 +1822,20 @@ const getIdCardApplicationNumbers = async (req, res) => {
             id: r.id,
             application_number: r.application_number,
             application_serial: Number(r.application_serial),
+            college_code: r.application_college_code,
+            course_code: r.application_course_code,
             student_name: r.student_name,
             admission_number: r.admission_number,
             user_type: 'student',
         }));
 
-        const applications = [...studentApplications, ...employeeApplications].sort(
-            (a, b) => a.application_serial - b.application_serial
-        );
+        const applications = [...studentApplications, ...employeeApplications].sort((a, b) => {
+            const collegeCmp = String(a.college_code || '').localeCompare(String(b.college_code || ''));
+            if (collegeCmp !== 0) return collegeCmp;
+            const courseCmp = String(a.course_code || '').localeCompare(String(b.course_code || ''));
+            if (courseCmp !== 0) return courseCmp;
+            return a.application_serial - b.application_serial;
+        });
 
         res.json({
             academic_year: academicYear,
@@ -1739,6 +1860,8 @@ const getIdCardsForPrint = async (req, res) => {
         const academicYear = resolveAcademicYear(req.query);
         const fromSerial = Number(req.query.fromSerial ?? req.query.from_serial ?? 1);
         const toSerial = Number(req.query.toSerial ?? req.query.to_serial ?? fromSerial);
+        const collegeCode = req.query.collegeCode || req.query.college_code || null;
+        const courseCode = req.query.courseCode || req.query.course_code || null;
 
         if (!Number.isFinite(fromSerial) || !Number.isFinite(toSerial) || fromSerial < 1 || toSerial < fromSerial) {
             return res.status(400).json({ message: 'Valid fromSerial and toSerial are required (fromSerial <= toSerial, both >= 1).' });
@@ -1746,6 +1869,17 @@ const getIdCardsForPrint = async (req, res) => {
 
         const { resolveStudentPhoto } = require('../utils/studentPhoto');
         const fallbackAcademicYear = process.env.CURRENT_ACADEMIC_YEAR || getDefaultAcademicYear();
+
+        const mysqlParams = [fromSerial, toSerial, fallbackAcademicYear, academicYear];
+        let mysqlFilterSql = '';
+        if (collegeCode) {
+            mysqlFilterSql += ' AND tr.application_college_code = ?';
+            mysqlParams.push(collegeCode);
+        }
+        if (courseCode) {
+            mysqlFilterSql += ' AND tr.application_course_code = ?';
+            mysqlParams.push(courseCode);
+        }
 
         const [mysqlRows] = await mysqlPool.query(
             `SELECT tr.*,
@@ -1761,8 +1895,9 @@ const getIdCardsForPrint = async (req, res) => {
                AND tr.application_serial IS NOT NULL
                AND tr.application_serial BETWEEN ? AND ?
                AND COALESCE(tr.academic_year, ?) = ?
-             ORDER BY tr.application_serial ASC`,
-            [fromSerial, toSerial, fallbackAcademicYear, academicYear]
+               ${mysqlFilterSql}
+             ORDER BY tr.application_college_code ASC, tr.application_course_code ASC, tr.application_serial ASC`,
+            mysqlParams
         );
 
         const studentPassengers = mysqlRows.map((row) => ({
@@ -1771,7 +1906,7 @@ const getIdCardsForPrint = async (req, res) => {
             user_type: 'student',
         }));
 
-        const mongoRows = await EmployeeTransportRequest.find({
+        const mongoQuery = {
             status: 'approved',
             application_serial: { $gte: fromSerial, $lte: toSerial },
             $or: [
@@ -1779,8 +1914,12 @@ const getIdCardsForPrint = async (req, res) => {
                 { academic_year: null },
                 { academic_year: { $exists: false } },
             ],
-        })
-            .sort({ application_serial: 1 })
+        };
+        if (collegeCode) mongoQuery.application_college_code = collegeCode;
+        if (courseCode) mongoQuery.application_course_code = courseCode;
+
+        const mongoRows = await EmployeeTransportRequest.find(mongoQuery)
+            .sort({ application_college_code: 1, application_course_code: 1, application_serial: 1 })
             .lean();
 
         const employeePassengers = mongoRows

@@ -1,9 +1,18 @@
 const mongoose = require('mongoose');
 
+const academicYearFareSchema = new mongoose.Schema({
+    academicYear: { type: String, required: true },
+    fare: { type: Number, required: true },
+}, { _id: false });
+
 const stageSchema = new mongoose.Schema({
     stageName: { type: String, required: true },
     distanceFromStart: { type: Number, required: true }, // in km
-    fare: { type: Number, required: true }
+    fare: { type: Number, required: true },
+    academicYearFares: {
+        type: [academicYearFareSchema],
+        default: [],
+    },
 });
 
 const routeSchema = new mongoose.Schema({

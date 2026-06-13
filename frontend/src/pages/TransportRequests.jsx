@@ -48,7 +48,7 @@ const TransportRequests = () => {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(null);
     const [message, setMessage] = useState({ text: '', type: '' });
-    const [approveModal, setApproveModal] = useState({ open: false, requestId: null, data: null, loading: true, error: null });
+    const [approveModal, setApproveModal] = useState({ open: false, requestId: null, data: null, selectedBusId: '', loading: true, error: null });
     const [selectedPassPassenger, setSelectedPassPassenger] = useState(null);
     const [fetchingPass, setFetchingPass] = useState(false);
     const [courseExpiryModalOpen, setCourseExpiryModalOpen] = useState(false);
@@ -63,7 +63,9 @@ const TransportRequests = () => {
     const [detailModal, setDetailModal] = useState({ open: false, request: null });
     const [idCardModalOpen, setIdCardModalOpen] = useState(false);
     const [idCardAcademicYear, setIdCardAcademicYear] = useState(getDefaultAcademicYear());
-    const [idCardApplications, setIdCardApplications] = useState([]);
+    const [idCardCollegeCode, setIdCardCollegeCode] = useState('');
+    const [idCardCourseCode, setIdCardCourseCode] = useState('');
+    const [idCardAllApplications, setIdCardAllApplications] = useState([]);
     const [idCardApplicationsLoading, setIdCardApplicationsLoading] = useState(false);
     const [idCardFromSerial, setIdCardFromSerial] = useState('');
     const [idCardToSerial, setIdCardToSerial] = useState('');
@@ -109,6 +111,32 @@ const TransportRequests = () => {
         onPrintError: () => setIdCardPrintLoading(false),
     });
 
+    const idCardCollegeOptions = [...new Set(
+        idCardAllApplications.map((app) => app.college_code).filter(Boolean)
+    )].sort();
+    const idCardCourseOptions = [...new Set(
+        idCardAllApplications
+            .filter((app) => !idCardCollegeCode || app.college_code === idCardCollegeCode)
+            .map((app) => app.course_code)
+            .filter(Boolean)
+    )].sort();
+    const idCardApplications = idCardAllApplications.filter((app) => {
+        if (idCardCollegeCode && app.college_code !== idCardCollegeCode) return false;
+        if (idCardCourseCode && app.course_code !== idCardCourseCode) return false;
+        return true;
+    });
+
+    const buildIdCardQuery = (fromSerial, toSerial) => {
+        const params = new URLSearchParams({
+            academicYear: idCardAcademicYear,
+            fromSerial: String(fromSerial),
+            toSerial: String(toSerial),
+        });
+        if (idCardCollegeCode) params.append('collegeCode', idCardCollegeCode);
+        if (idCardCourseCode) params.append('courseCode', idCardCourseCode);
+        return params.toString();
+    };
+
     const fetchIdCardApplications = async (year) => {
         setIdCardApplicationsLoading(true);
         try {
@@ -118,23 +146,20 @@ const TransportRequests = () => {
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
                 const apps = data.applications || [];
-                setIdCardApplications(apps);
-                if (apps.length > 0) {
-                    setIdCardFromSerial(String(apps[0].application_serial));
-                    setIdCardToSerial(String(apps[apps.length - 1].application_serial));
-                } else {
-                    setIdCardFromSerial('');
-                    setIdCardToSerial('');
-                }
+                setIdCardAllApplications(apps);
+                setIdCardCollegeCode('');
+                setIdCardCourseCode('');
+                setIdCardFromSerial('');
+                setIdCardToSerial('');
                 setIdCardPreviewCount(null);
             } else {
-                setIdCardApplications([]);
+                setIdCardAllApplications([]);
                 setIdCardFromSerial('');
                 setIdCardToSerial('');
                 setMessage({ text: data.message || 'Failed to load transport application numbers.', type: 'error' });
             }
         } catch {
-            setIdCardApplications([]);
+            setIdCardAllApplications([]);
             setIdCardFromSerial('');
             setIdCardToSerial('');
             setMessage({ text: 'Error loading transport application numbers.', type: 'error' });
@@ -142,6 +167,17 @@ const TransportRequests = () => {
             setIdCardApplicationsLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (!idCardApplications.length) {
+            setIdCardFromSerial('');
+            setIdCardToSerial('');
+            return;
+        }
+        setIdCardFromSerial(String(idCardApplications[0].application_serial));
+        setIdCardToSerial(String(idCardApplications[idCardApplications.length - 1].application_serial));
+        setIdCardPreviewCount(null);
+    }, [idCardCollegeCode, idCardCourseCode, idCardAllApplications]);
 
     const openIdCardModal = () => {
         setIdCardAcademicYear(academicYear);
@@ -188,7 +224,7 @@ const TransportRequests = () => {
         setIdCardPrintLoading(true);
         try {
             const response = await apiFetch(
-                `${API_BASE}/transport-requests/id-cards-print?academicYear=${encodeURIComponent(idCardAcademicYear)}&fromSerial=${fromSerial}&toSerial=${toSerial}`
+                `${API_BASE}/transport-requests/id-cards-print?${buildIdCardQuery(fromSerial, toSerial)}`
             );
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
@@ -210,7 +246,7 @@ const TransportRequests = () => {
         setIdCardPrintLoading(true);
         try {
             const response = await apiFetch(
-                `${API_BASE}/transport-requests/id-cards-print?academicYear=${encodeURIComponent(idCardAcademicYear)}&fromSerial=${fromSerial}&toSerial=${toSerial}`
+                `${API_BASE}/transport-requests/id-cards-print?${buildIdCardQuery(fromSerial, toSerial)}`
             );
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
@@ -536,7 +572,13 @@ const TransportRequests = () => {
                 if (data.busesOnRoute && data.busesOnRoute.length === 1) {
                     defaultBusId = data.busesOnRoute[0].busNumber;
                 }
-                setApproveModal((m) => ({ ...m, data, selectedBusId: defaultBusId, loading: false, error: null }));
+                setApproveModal((m) => ({
+                    ...m,
+                    data,
+                    selectedBusId: defaultBusId,
+                    loading: false,
+                    error: null,
+                }));
             } else {
                 setApproveModal((m) => ({ ...m, loading: false, error: data.message || 'Failed to load semester options' }));
             }
@@ -561,10 +603,11 @@ const TransportRequests = () => {
         setActionLoading(id);
         setMessage({ text: '', type: '' });
         try {
+            const payload = { bus_id: approveModal.selectedBusId || null };
             const response = await apiFetch(`${API_BASE}/transport-requests/${id}/approve`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bus_id: approveModal.selectedBusId || null }),
+                body: JSON.stringify(payload),
             });
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
@@ -1304,6 +1347,13 @@ const TransportRequests = () => {
                                 {!approveModal.data.application_number && approveModal.data.next_application_number && (
                                     <p className="text-xs text-indigo-600 mt-1">Will be assigned when you confirm approval</p>
                                 )}
+                                {(approveModal.data.college_code || approveModal.data.course_code) && (
+                                    <p className="text-xs text-indigo-600 mt-2">
+                                        College: <span className="font-semibold">{approveModal.data.college_code || approveModal.data.college_name || '—'}</span>
+                                        {' · '}
+                                        Course: <span className="font-semibold">{approveModal.data.course_code || approveModal.data.course_name || '—'}</span>
+                                    </p>
+                                )}
                             </div>
                         )}
                         {approveModal.data.route_name && (
@@ -1398,6 +1448,46 @@ const TransportRequests = () => {
                             ))}
                         </select>
                     </div>
+
+                    {idCardAllApplications.length > 0 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                                    College Code
+                                </label>
+                                <select
+                                    value={idCardCollegeCode}
+                                    onChange={(e) => {
+                                        setIdCardCollegeCode(e.target.value);
+                                        setIdCardCourseCode('');
+                                    }}
+                                    disabled={idCardPrintLoading}
+                                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-60"
+                                >
+                                    <option value="">All Colleges</option>
+                                    {idCardCollegeOptions.map((code) => (
+                                        <option key={code} value={code}>{code}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                                    Course Code
+                                </label>
+                                <select
+                                    value={idCardCourseCode}
+                                    onChange={(e) => setIdCardCourseCode(e.target.value)}
+                                    disabled={idCardPrintLoading}
+                                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-60"
+                                >
+                                    <option value="">All Courses</option>
+                                    {idCardCourseOptions.map((code) => (
+                                        <option key={code} value={code}>{code}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    )}
 
                     {!idCardApplications.length ? (
                         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
