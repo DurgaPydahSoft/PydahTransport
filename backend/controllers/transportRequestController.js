@@ -1491,6 +1491,15 @@ const deleteConcession = async (req, res) => {
     const { admin_name, admin_id } = req.body;
 
     try {
+        if (isMongoId(id)) {
+            const reqRow = await EmployeeTransportRequest.findById(id);
+            if (!reqRow) {
+                return res.status(404).json({ message: 'Transport request not found' });
+            }
+            await EmployeeTransportRequest.findByIdAndDelete(id);
+            return res.json({ message: 'Transport request deleted successfully' });
+        }
+
         if (!mysqlPool) {
             return res.status(500).json({ message: 'MySQL connection not established' });
         }

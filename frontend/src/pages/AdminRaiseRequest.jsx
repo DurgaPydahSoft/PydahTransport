@@ -91,6 +91,7 @@ const AdminRaiseRequest = () => {
     const [busesOnRoute, setBusesOnRoute] = useState([]);
     const [busesLoading, setBusesLoading] = useState(false);
     const [approveModal, setApproveModal] = useState({ open: false, requestId: null, data: null, selectedBusId: '', loading: true, error: null });
+    const [raisedPendingRequestId, setRaisedPendingRequestId] = useState(null);
     const [actionLoading, setActionLoading] = useState(false);
     const [profileLoading, setProfileLoading] = useState(false);
     const [formError, setFormError] = useState('');
@@ -329,8 +330,40 @@ const AdminRaiseRequest = () => {
         }
     };
 
-    const closeApproveModal = () => {
+    const discardRaisedPendingRequest = async (requestId) => {
+        if (!requestId) return;
+        try {
+            const response = await apiFetch(`${API_BASE}/transport-requests/${requestId}`, {
+                method: 'DELETE',
+                body: JSON.stringify({
+                    admin_name: admin.name,
+                    admin_id: admin.id,
+                }),
+            });
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.message || 'Failed to discard pending request');
+            }
+        } catch (error) {
+            console.error('Error discarding pending request:', error);
+            setMessage({
+                text: 'Approval cancelled, but the pending request could not be removed. Check Transport Requests.',
+                type: 'error',
+            });
+        }
+    };
+
+    const closeApproveModal = async () => {
+        if (actionLoading) return;
+
+        const pendingId = raisedPendingRequestId;
         setApproveModal({ open: false, requestId: null, data: null, selectedBusId: '', loading: true, error: null });
+        setRaisedPendingRequestId(null);
+
+        if (pendingId) {
+            await discardRaisedPendingRequest(pendingId);
+            setMessage({ text: '', type: '' });
+        }
     };
 
     const handleConfirmApprove = async () => {
@@ -352,6 +385,7 @@ const AdminRaiseRequest = () => {
             });
             const data = await response.json().catch(() => ({}));
             if (response.ok) {
+                setRaisedPendingRequestId(null);
                 setMessage({
                     text: data.application_number
                         ? `Approved. Application No: ${data.application_number}`
@@ -439,8 +473,9 @@ const AdminRaiseRequest = () => {
                     setChangeType('route');
                 } else {
                     const requestId = resData.id || resData._id;
-                    setMessage({ text: 'Transport request raised. Complete approval below.', type: 'success' });
                     if (requestId) {
+                        setRaisedPendingRequestId(requestId);
+                        setMessage({ text: 'Review the details below and confirm approval.', type: 'success' });
                         await openApproveModal(requestId);
                     } else {
                         setMessage({ text: 'Request raised but could not open approval dialog. Approve from Transport Requests.', type: 'error' });
@@ -967,7 +1002,8 @@ const AdminRaiseRequest = () => {
                             <button
                                 type="button"
                                 onClick={closeApproveModal}
-                                className="px-4 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                disabled={actionLoading}
+                                className="px-4 py-3 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                             >
                                 Cancel
                             </button>
