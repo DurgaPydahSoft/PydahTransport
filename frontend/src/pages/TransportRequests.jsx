@@ -71,7 +71,9 @@ const TransportRequests = () => {
     const [idCardToSerial, setIdCardToSerial] = useState('');
     const [idCardPerPage, setIdCardPerPage] = useState(5);
     const [idCardPassengers, setIdCardPassengers] = useState([]);
+    const [idCardPadToFullPage, setIdCardPadToFullPage] = useState(true);
     const [idCardPrintLoading, setIdCardPrintLoading] = useState(false);
+    const [fetchingIdCard, setFetchingIdCard] = useState(false);
     const [idCardPreviewCount, setIdCardPreviewCount] = useState(null);
     const academicYearOptions = getAcademicYearOptions();
 
@@ -85,7 +87,7 @@ const TransportRequests = () => {
     });
 
     const handlePrintAdmitCardClick = async (p) => {
-        if (fetchingPass) return;
+        if (fetchingPass || fetchingIdCard) return;
         setFetchingPass(true);
         try {
             const response = await apiFetch(`${API_BASE}/transport-requests/${p.id}/full-details`);
@@ -104,12 +106,58 @@ const TransportRequests = () => {
         }
     };
 
+    const attachQrToPassenger = async (passenger) => {
+        const verifyUrl = getTransportVerifyUrl(passenger.id ?? passenger._id);
+        if (!verifyUrl) return passenger;
+        try {
+            const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
+                errorCorrectionLevel: 'M',
+                margin: 1,
+                width: 256,
+            });
+            return { ...passenger, qrDataUrl };
+        } catch {
+            return passenger;
+        }
+    };
+
     const handlePrintIdCards = useReactToPrint({
         contentRef: idCardSheetRef,
         documentTitle: `Bus-ID-Cards-${idCardAcademicYear}`,
         onAfterPrint: () => setIdCardPrintLoading(false),
         onPrintError: () => setIdCardPrintLoading(false),
     });
+
+    const handlePrintIdCardClick = async (req) => {
+        if (fetchingIdCard || fetchingPass) return;
+        if (req.status !== 'approved') {
+            setMessage({ text: 'ID card is available only for approved requests.', type: 'error' });
+            return;
+        }
+        setFetchingIdCard(true);
+        try {
+            const response = await apiFetch(`${API_BASE}/transport-requests/${req.id}/full-details`);
+            if (!response.ok) {
+                alert('Failed to fetch passenger details for ID card.');
+                return;
+            }
+            const passenger = await response.json();
+            const passengerWithQr = await attachQrToPassenger(passenger);
+            const year = passenger.academic_year || req.academic_year || academicYear;
+            flushSync(() => {
+                setIdCardPassengers([passengerWithQr]);
+                setIdCardAcademicYear(year);
+                setIdCardPerPage(5);
+                setIdCardPadToFullPage(false);
+            });
+            await triggerAdmitCardPrint(handlePrintIdCards, idCardSheetRef);
+        } catch (error) {
+            console.error('Error printing ID card:', error);
+            alert('Error preparing ID card.');
+        } finally {
+            setFetchingIdCard(false);
+        }
+    };
 
     const idCardCollegeOptions = [...new Set(
         idCardAllApplications.map((app) => app.college_code).filter(Boolean)
@@ -261,24 +309,12 @@ const TransportRequests = () => {
                 return;
             }
             const passengersWithQr = await Promise.all(
-                passengers.map(async (passenger) => {
-                    const verifyUrl = getTransportVerifyUrl(passenger.id ?? passenger._id);
-                    if (!verifyUrl) return passenger;
-                    try {
-                        const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
-                            errorCorrectionLevel: 'M',
-                            margin: 1,
-                            width: 256,
-                        });
-                        return { ...passenger, qrDataUrl };
-                    } catch {
-                        return passenger;
-                    }
-                })
+                passengers.map((passenger) => attachQrToPassenger(passenger))
             );
             flushSync(() => {
                 setIdCardPassengers(passengersWithQr);
                 setIdCardPreviewCount(passengersWithQr.length);
+                setIdCardPadToFullPage(true);
             });
             await triggerAdmitCardPrint(handlePrintIdCards, idCardSheetRef);
             setIdCardModalOpen(false);
@@ -1093,15 +1129,26 @@ const TransportRequests = () => {
                                             </>
                                         )}
                                         {req.status === 'approved' && (
-                                            <button
-                                                type="button"
-                                                disabled={fetchingPass}
-                                                onClick={() => handlePrintAdmitCardClick(req)}
-                                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-50 shadow-sm transition-colors"
-                                            >
-                                                <FileText size={17} />
-                                                {fetchingPass ? 'Preparing…' : 'Print Admit Card'}
-                                            </button>
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    disabled={fetchingPass || fetchingIdCard}
+                                                    onClick={() => handlePrintAdmitCardClick(req)}
+                                                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-black disabled:opacity-50 shadow-sm transition-colors"
+                                                >
+                                                    <FileText size={17} />
+                                                    {fetchingPass ? 'Preparing…' : 'Print Admit Card'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={fetchingPass || fetchingIdCard}
+                                                    onClick={() => handlePrintIdCardClick(req)}
+                                                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-700 text-white text-sm font-bold hover:bg-blue-800 disabled:opacity-50 shadow-sm transition-colors"
+                                                >
+                                                    <Printer size={17} />
+                                                    {fetchingIdCard ? 'Preparing…' : 'Print ID Card'}
+                                                </button>
+                                            </>
                                         )}
                                         <button
                                             type="button"
@@ -1602,6 +1649,7 @@ const TransportRequests = () => {
                 passengers={idCardPassengers}
                 academicYear={idCardAcademicYear}
                 cardsPerPage={idCardPerPage}
+                padToFullPage={idCardPadToFullPage}
             />
         </Layout >
     );

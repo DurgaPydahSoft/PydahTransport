@@ -31,8 +31,9 @@ const chunk = (items, size) => {
 };
 
 /** Always render exactly `cardsPerPage` rows per sheet (empty slots for unused rows). */
-const buildPageSlots = (pagePassengers, cardsPerPage) => {
+const buildPageSlots = (pagePassengers, cardsPerPage, padToFullPage = true) => {
     const slots = pagePassengers.map((passenger) => ({ passenger }));
+    if (!padToFullPage) return slots;
     while (slots.length < cardsPerPage) {
         slots.push({ passenger: null });
     }
@@ -171,7 +172,7 @@ const BusIdCardBack = ({ passenger, isTemplate = false }) => (
     </div>
 );
 
-const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, cardsPerPage = 5 }, ref) => {
+const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, cardsPerPage = 5, padToFullPage = true }, ref) => {
     const pages = useMemo(() => chunk(passengers, cardsPerPage), [passengers, cardsPerPage]);
 
     if (!passengers.length) return null;
@@ -259,16 +260,16 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                         page-break-inside: avoid;
                     }
                     .bus-id-page--5 {
-                        --h-gutter: 4mm;
+                        --h-gutter: 3.2mm;
                         --v-gutter: 7.5mm;
-                        --card-side-inset: 7.5mm;
+                        --card-side-inset: 8.5mm;
                         --card-cut-inset: 2mm;
                         --card-row-height: calc((289mm - 2px - (4 * var(--h-gutter))) / 5);
                     }
                     .bus-id-page--6 {
-                        --h-gutter: 3.5mm;
+                        --h-gutter: 2.7mm;
                         --v-gutter: 6.5mm;
-                        --card-side-inset: 6.5mm;
+                        --card-side-inset: 7.5mm;
                         --card-cut-inset: 1.8mm;
                         --card-row-height: calc((289mm - 2px - (5 * var(--h-gutter))) / 6);
                     }
@@ -615,7 +616,7 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                         className={`bus-id-page bus-id-page--${cardsPerPage}`}
                     >
                         <div className="bus-id-sheet">
-                            {buildPageSlots(pagePassengers, cardsPerPage).map((slot, slotIndex) => (
+                            {buildPageSlots(pagePassengers, cardsPerPage, padToFullPage).map((slot, slotIndex, slots) => (
                                 <React.Fragment
                                     key={slot.passenger?.id || slot.passenger?.application_serial || `slot-${pageIndex}-${slotIndex}`}
                                 >
@@ -632,7 +633,7 @@ const TransportBusIdCardSheet = forwardRef(({ passengers = [], academicYear, car
                                             <BusIdCardBack passenger={slot.passenger} isTemplate={!slot.passenger} />
                                         </div>
                                     </div>
-                                    {slotIndex < cardsPerPage - 1 && (
+                                    {slotIndex < slots.length - 1 && (
                                         <div className="id-card-h-divider" aria-hidden="true" />
                                     )}
                                 </React.Fragment>
